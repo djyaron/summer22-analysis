@@ -9,7 +9,7 @@ Starter code for generating/reproducing the heatmap by comparing different metho
 For more complete documentation, refer to the functions defined in the module
 ani1_interface
 """
-#%% Imports, definitions
+# %% Imports, definitions
 
 import itertools
 import os
@@ -18,6 +18,7 @@ from collections import Counter
 from typing import Dict, List, Optional
 
 import numpy as np
+import pandas as pd
 
 from ani1_interface import get_ani1data
 import seaborn as sns
@@ -28,7 +29,7 @@ from tqdm import tqdm
 Array = np.ndarray
 
 
-#%% Code behind
+# %% Code behind
 
 
 def build_XX_matrix(dataset: List[Dict], allowed_Zs: List[int]) -> Array:
@@ -39,7 +40,7 @@ def build_XX_matrix(dataset: List[Dict], allowed_Zs: List[int]) -> Array:
     for imol, molecule in enumerate(dataset):
         Zc = Counter(molecule["atomic_numbers"])
         for Z, count in Zc.items():
-            # TODO: The XX matrix is uniquely determined by `dataset` and
+            # td: The XX matrix is uniquely determined by `dataset` and
             # could be cached
             XX[imol, iZ[Z]] = count
             XX[imol, len(allowed_Zs)] = 1.0
@@ -48,11 +49,11 @@ def build_XX_matrix(dataset: List[Dict], allowed_Zs: List[int]) -> Array:
 
 
 def fit_linear_ref_ener(
-    dataset: List[Dict],
-    target1: str,
-    target2: str,
-    allowed_Zs: List[int],
-    XX: Optional[Array] = None,
+        dataset: List[Dict],
+        target1: str,
+        target2: str,
+        allowed_Zs: List[int],
+        XX: Optional[Array] = None,
 ) -> Array:
     r"""Fits a linear reference energy model between the DFTB+ method and some
         energy target
@@ -130,13 +131,13 @@ working is up to your group.
 
 
 def get_ani1data_cached(
-    ani1_path: str,
-    molecules_path: str,
-    allowed_Z: List[int],
-    heavy_atoms: List[int],
-    max_config: int,
-    target: Dict[str, str],
-    **kwargs,
+        ani1_path: str,
+        molecules_path: str,
+        allowed_Z: List[int],
+        heavy_atoms: List[int],
+        max_config: int,
+        target: Dict[str, str],
+        **kwargs,
 ) -> List[Dict]:
     r"""Loads the ani1 data file and returns the molecules in the file
 
@@ -171,14 +172,48 @@ def get_ani1data_cached(
         with open(molecules_path, "rb") as f:
             molecules = pickle.load(f)
 
+def calc_resid(
+        molecules: List[Dict],
+        target: str,
+        allowed_Z: List[int],
+        show_progress: bool = False,
+        XX: Optional[Array] = None,
+) -> plt.Axes:
+    n_targets = len(target.keys())
+
+    target_keys = list(target.keys())
+    target_values = list(target.values())
+
+    # List indices
+    target_idx_pairs = list(itertools.combinations(range(n_targets), 2))
+
+    conversion = 627.50961
+
+    if show_progress:
+        target_idx_pairs = tqdm(target_idx_pairs)
+
+    resid_matrix = {}
+
+    for (idx_1, idx_2) in target_idx_pairs:
+        coefs, XX, method1_mat, method2_mat = fit_linear_ref_ener(
+            molecules, target_keys[idx_1], target_keys[idx_2], allowed_Z, XX=XX
+        )
+
+        resid = method2_mat - (method1_mat + (XX @ coefs))
+        resid = resid*conversion
+        target_1_name = target_keys[idx_1]
+        target_2_name = target_keys[idx_2]
+        resid_matrix[(target_1_name, target_2_name)] = resid
+
+    return resid_matrix
 
 def create_heatmap(
-    molecules: List[Dict],
-    target: str,
-    allowed_Z: List[int],
-    plot_args: Optional[Dict] = None,
-    show_progress: bool = False,
-    XX: Optional[Array] = None,
+        molecules: List[Dict],
+        target: str,
+        allowed_Z: List[int],
+        plot_args: Optional[Dict] = None,
+        show_progress: bool = False,
+        XX: Optional[Array] = None,
 ) -> plt.Axes:
     """Creates a heatmap of the MAE between methods.
 
@@ -232,10 +267,34 @@ def create_heatmap(
     return ax
 
 
-#%% Main block
+def filter_outliers(data_matrix):
+    """Filters outliers from each element in the dataset
+
+    Arguments:
+        data_matrix (Dict): dictionary with the mean absolute error
+
+    Returns:
+        filtered_dict (Dict): matrix with no outliers
+
+    Notes: Using the IQR to calc outliers
+    """
+    filtered_dict = {}
+    for (target1, target2), resid in data_matrix.items():
+        q1, q3 = np.percentile(resid, [25, 75])
+        iqr = q3 - q1
+        upper_bound = q3 + 1.5 * iqr
+        lower_bound = q1 - 1.5 * iqr
+
+        filtered_element = resid[resid < upper_bound]
+        filtered_element = filtered_element[filtered_element > lower_bound]
+        filtered_dict[(target1, target2)] = filtered_element
+
+    return filtered_dict
+
+# %% Main block
 
 # https://drive.google.com/file/d/1SP8SX0v5d1UJAX69GpMV-JtjfUSnf-QB
-ani1_path = "../../Data/ANI-1ccx_clean_fullentry.h5"
+ani1_path = "C:/Users/nanja/Box Sync/99519 ML Chem/summer22-analysis/ANI-1ccx_clean_fullentry.h5"
 molecules_path = "../../Data/ani1-extracted.pkl"
 
 ani1_config = {
@@ -289,22 +348,29 @@ molecules = [m for m in molecules if not np.isnan(list(m["targets"].values())).a
 
 XX = build_XX_matrix(molecules, ani1_config["allowed_Z"])
 
-#%%
-
-# Create a heatmap of the MAE between methods
-fig, ax = plt.subplots(figsize=(15, 15))
-create_heatmap(
-    molecules,
-    ani1_config["target"],
-    ani1_config["allowed_Z"],
-    show_progress=True,
-)
-
-plt.show()
-
 # %%
 
-molecules["H2O"]
+# Create a heatmap of the MAE between methods
+# fig, ax = plt.subplots(figsize=(15, 15))
+# create_heatmap(
+#     molecules,
+#     ani1_config["target"],
+#     ani1_config["allowed_Z"],
+#     show_progress=True,
+# )
 
+# plt.show()
+
+# Create a boxplot for each MAE between methods
+resid = calc_resid(molecules, ani1_config["target"], ani1_config["allowed_Z"], show_progress=True)
+filtered_data = filter_outliers(resid)
+boxfig = plt.figure(figsize=(10,10))
+plt.subplots(figsize=(15,15))
+boxplot_data = list(filtered_data.values())
+plt.boxplot(boxplot_data)
+plt.show()
+# %%
+
+# molecules["H2O"]
 
 # %%
