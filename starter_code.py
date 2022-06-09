@@ -39,8 +39,6 @@ def build_XX_matrix(dataset: List[Dict], allowed_Zs: List[int]) -> Array:
     for imol, molecule in enumerate(dataset):
         Zc = Counter(molecule["atomic_numbers"])
         for Z, count in Zc.items():
-            # TODO: The XX matrix is uniquely determined by `dataset` and
-            # could be cached
             XX[imol, iZ[Z]] = count
             XX[imol, len(allowed_Zs)] = 1.0
 
@@ -301,10 +299,6 @@ create_heatmap(
 )
 
 plt.show()
-
-# %%
-
-molecules["H2O"]
 
 
 # %%
