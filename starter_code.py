@@ -31,8 +31,28 @@ Array = np.ndarray
 #%% Code behind
 
 
+def build_XX_matrix(dataset: List[Dict], allowed_Zs: List[int]) -> Array:
+    nmol = len(dataset)
+    XX = np.zeros([nmol, len(allowed_Zs) + 1])
+    iZ = {x: i for i, x in enumerate(allowed_Zs)}
+
+    for imol, molecule in enumerate(dataset):
+        Zc = Counter(molecule["atomic_numbers"])
+        for Z, count in Zc.items():
+            # TODO: The XX matrix is uniquely determined by `dataset` and
+            # could be cached
+            XX[imol, iZ[Z]] = count
+            XX[imol, len(allowed_Zs)] = 1.0
+
+    return XX
+
+
 def fit_linear_ref_ener(
-    dataset: List[Dict], target1: str, target2: str, allowed_Zs: List[int]
+    dataset: List[Dict],
+    target1: str,
+    target2: str,
+    allowed_Zs: List[int],
+    XX: Optional[Array] = None,
 ) -> Array:
     r"""Fits a linear reference energy model between the DFTB+ method and some
         energy target
@@ -47,6 +67,9 @@ def fit_linear_ref_ener(
     Returns:
         coefs (Array): The coefficients of the reference energy
         XX (Array): 2D matrix in the number of atoms
+        method1_mat (Array): The reference energy of the DFTB+ method
+        method2_mat (Array): The reference energy of the target
+        XX (Array): Per-molecule atomic frequency matrix
 
     Notes: The reference energy corrects the magnitude between two methods
         in the following way:
@@ -66,18 +89,20 @@ def fit_linear_ref_ener(
         where XX and coefs are the output of this function.
     """
     nmol = len(dataset)
-    XX = np.zeros([nmol, len(allowed_Zs) + 1])
+
+    if XX is None:
+        XX = build_XX_matrix(dataset, allowed_Zs)
+    else:
+        expected = (nmol, len(allowed_Zs) + 1)
+        if XX.shape != expected:
+            raise ValueError(
+                f"Expected XX to have shape {expected}, but got {XX.shape}"
+            )
+
     method1_mat = np.zeros([nmol])
     method2_mat = np.zeros([nmol])
-    iZ = {x: i for i, x in enumerate(allowed_Zs)}
 
     for imol, molecule in enumerate(dataset):
-        Zc = Counter(molecule["atomic_numbers"])
-        for Z, count in Zc.items():
-            # TODO: The XX matrix is uniquely determined by `dataset` and
-            # could be cached
-            XX[imol, iZ[Z]] = count
-            XX[imol, len(allowed_Zs)] = 1.0
         method1_mat[imol] = molecule["targets"][target1]
         method2_mat[imol] = molecule["targets"][target2]
 
@@ -147,25 +172,13 @@ def get_ani1data_cached(
             molecules = pickle.load(f)
 
 
-def mae_matrix_helper(
-    target_pair: tuple[int], molecules: List[Dict], allowed_Z: List[int]
-) -> float:
-    target_1, target_2 = target_pair
-    coefs, XX, method1_mat, method2_mat = fit_linear_ref_ener(
-        molecules, target_1, target_2, allowed_Z
-    )
-    resid = method2_mat - (method1_mat + (XX @ coefs))
-    mae = np.mean(np.abs(resid))
-
-    return mae
-
-
 def create_heatmap(
     molecules: List[Dict],
     target: str,
     allowed_Z: List[int],
     plot_args: Optional[Dict] = None,
     show_progress: bool = False,
+    XX: Optional[Array] = None,
 ) -> plt.Axes:
     """Creates a heatmap of the MAE between methods.
 
@@ -194,11 +207,8 @@ def create_heatmap(
         target_idx_pairs = tqdm(target_idx_pairs)
 
     for (idx_1, idx_2) in target_idx_pairs:
-        coefs, XX, method1_mat, method2_mat = fit_linear_ref_ener(
-            molecules,
-            target_keys[idx_1],
-            target_keys[idx_2],
-            allowed_Z,
+        coefs, XX, method1_mat, method2_mat = fit_linear_ref_ener2(
+            molecules, target_keys[idx_1], target_keys[idx_2], allowed_Z, XX=XX
         )
 
         resid = method2_mat - (method1_mat + (XX @ coefs))
@@ -231,7 +241,7 @@ molecules_path = "../../Data/ani1-extracted.pkl"
 ani1_config = {
     "allowed_Z": [1, 6, 7, 8],
     "heavy_atoms": list(range(1, 9)),
-    "max_config": 1_000,
+    "max_config": 1_000_000,
     "target": {
         "dt": "dftb.energy",  # Dftb Total
         # "de": "dftb.elec_energy",  # Dftb Electronic
@@ -277,6 +287,11 @@ molecules = get_ani1data(
 # This is a problem for the OLS solver, so we drop these molecules.
 molecules = [m for m in molecules if not np.isnan(list(m["targets"].values())).any()]
 
+XX = build_XX_matrix(molecules, ani1_config["allowed_Z"])
+
+#%%
+
+# Create a heatmap of the MAE between methods
 fig, ax = plt.subplots(figsize=(15, 15))
 create_heatmap(
     molecules,
@@ -286,3 +301,5 @@ create_heatmap(
 )
 
 plt.show()
+
+# %%
