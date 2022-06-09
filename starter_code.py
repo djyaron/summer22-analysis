@@ -49,11 +49,11 @@ def build_XX_matrix(dataset: List[Dict], allowed_Zs: List[int]) -> Array:
 
 
 def fit_linear_ref_ener(
-        dataset: List[Dict],
-        target1: str,
-        target2: str,
-        allowed_Zs: List[int],
-        XX: Optional[Array] = None,
+    dataset: List[Dict],
+    target1: str,
+    target2: str,
+    allowed_Zs: List[int],
+    XX: Optional[Array] = None,
 ) -> Array:
     r"""Fits a linear reference energy model between the DFTB+ method and some
         energy target
@@ -131,13 +131,13 @@ working is up to your group.
 
 
 def get_ani1data_cached(
-        ani1_path: str,
-        molecules_path: str,
-        allowed_Z: List[int],
-        heavy_atoms: List[int],
-        max_config: int,
-        target: Dict[str, str],
-        **kwargs,
+    ani1_path: str,
+    molecules_path: str,
+    allowed_Z: List[int],
+    heavy_atoms: List[int],
+    max_config: int,
+    target: Dict[str, str],
+    **kwargs,
 ) -> List[Dict]:
     r"""Loads the ani1 data file and returns the molecules in the file
 
@@ -172,12 +172,13 @@ def get_ani1data_cached(
         with open(molecules_path, "rb") as f:
             molecules = pickle.load(f)
 
+
 def calc_resid(
-        molecules: List[Dict],
-        target: str,
-        allowed_Z: List[int],
-        show_progress: bool = False,
-        XX: Optional[Array] = None,
+    molecules: List[Dict],
+    target: str,
+    allowed_Z: List[int],
+    show_progress: bool = False,
+    XX: Optional[Array] = None,
 ) -> plt.Axes:
     n_targets = len(target.keys())
 
@@ -200,20 +201,21 @@ def calc_resid(
         )
 
         resid = method2_mat - (method1_mat + (XX @ coefs))
-        resid = resid*conversion
+        resid = resid * conversion
         target_1_name = target_keys[idx_1]
         target_2_name = target_keys[idx_2]
         resid_matrix[(target_1_name, target_2_name)] = resid
 
     return resid_matrix
 
+
 def create_heatmap(
-        molecules: List[Dict],
-        target: str,
-        allowed_Z: List[int],
-        plot_args: Optional[Dict] = None,
-        show_progress: bool = False,
-        XX: Optional[Array] = None,
+    molecules: List[Dict],
+    target: str,
+    allowed_Z: List[int],
+    plot_args: Optional[Dict] = None,
+    show_progress: bool = False,
+    XX: Optional[Array] = None,
 ) -> plt.Axes:
     """Creates a heatmap of the MAE between methods.
 
@@ -291,6 +293,7 @@ def filter_outliers(data_matrix):
 
     return filtered_dict
 
+
 # %% Main block
 
 # https://drive.google.com/file/d/1SP8SX0v5d1UJAX69GpMV-JtjfUSnf-QB
@@ -362,10 +365,12 @@ XX = build_XX_matrix(molecules, ani1_config["allowed_Z"])
 # plt.show()
 
 # Create a boxplot for each MAE between methods
-resid = calc_resid(molecules, ani1_config["target"], ani1_config["allowed_Z"], show_progress=True)
+resid = calc_resid(
+    molecules, ani1_config["target"], ani1_config["allowed_Z"], show_progress=True
+)
 filtered_data = filter_outliers(resid)
-boxfig = plt.figure(figsize=(10,10))
-plt.subplots(figsize=(15,15))
+boxfig = plt.figure(figsize=(10, 10))
+plt.subplots(figsize=(15, 15))
 boxplot_data = list(filtered_data.values())
 plt.boxplot(boxplot_data)
 plt.show()
