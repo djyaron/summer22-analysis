@@ -207,7 +207,7 @@ def create_heatmap(
         target_idx_pairs = tqdm(target_idx_pairs)
 
     for (idx_1, idx_2) in target_idx_pairs:
-        coefs, XX, method1_mat, method2_mat = fit_linear_ref_ener2(
+        coefs, XX, method1_mat, method2_mat = fit_linear_ref_ener(
             molecules, target_keys[idx_1], target_keys[idx_2], allowed_Z, XX=XX
         )
 
@@ -301,5 +301,10 @@ create_heatmap(
 )
 
 plt.show()
+
+# %%
+
+molecules["H2O"]
+
 
 # %%
