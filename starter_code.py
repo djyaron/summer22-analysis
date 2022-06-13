@@ -15,7 +15,7 @@ import itertools
 import os
 import pickle
 from collections import Counter
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -23,6 +23,7 @@ import pandas as pd
 from ani1_interface import get_ani1data
 import seaborn as sns
 import matplotlib.pyplot as plt
+import re
 
 from tqdm import tqdm
 
@@ -179,7 +180,7 @@ def calc_resid(
     allowed_Z: List[int],
     show_progress: bool = False,
     XX: Optional[Array] = None,
-) -> plt.Axes:
+) -> Dict[Tuple[str, str], Array]:
     n_targets = len(target.keys())
 
     target_keys = list(target.keys())
@@ -244,6 +245,7 @@ def create_heatmap(
         target_idx_pairs = tqdm(target_idx_pairs)
 
     for (idx_1, idx_2) in target_idx_pairs:
+        # TODO: Refactor this function to use the calc_resid function
         coefs, XX, method1_mat, method2_mat = fit_linear_ref_ener(
             molecules, target_keys[idx_1], target_keys[idx_2], allowed_Z, XX=XX
         )
@@ -269,7 +271,9 @@ def create_heatmap(
     return ax
 
 
-def filter_outliers(data_matrix):
+def filter_outliers(
+    data_matrix: Dict[Tuple[str, str], Array]
+) -> Dict[Tuple[str, str], Array]:
     """Filters outliers from each element in the dataset
 
     Arguments:
@@ -294,11 +298,123 @@ def filter_outliers(data_matrix):
     return filtered_dict
 
 
+# Functions for heavy atom residual analysis
+
+
+def num_heavy_atoms(name: str) -> int:
+    matches = re.findall(r"[A-Z]\d+", name)
+    num_heavy = sum(int(m[1:]) for m in matches if not m.startswith("H"))
+    return num_heavy
+
+
+def get_residuals_by_num_heavy_atoms(
+    molecules: List[Dict], residuals: Array, heavy_atoms: list[int]
+) -> Dict:
+
+    molecules_by_heavy_atoms = {x: [] for x in heavy_atoms}
+
+    for i, molecule in enumerate(molecules):
+        num_heavy = num_heavy_atoms(molecule["name"])
+
+        resid_for_molecule = residuals[i]
+        molecules_by_heavy_atoms[num_heavy].append(resid_for_molecule)
+
+    return molecules_by_heavy_atoms
+
+
+def rmse(y: Array, y_pred: Optional[Array] = None) -> float:
+    """Calculate the root mean squared error between y and y_pred.
+
+    If y_pred is not provided, y is treated as the residual vector.
+    """
+
+    if y_pred is None:
+        rmse = np.sqrt(np.mean(np.power(y, 2)))
+    else:
+        rmse = np.sqrt(np.mean(np.power((y - y_pred), 2)))
+
+    return rmse
+
+
+def compute_rmse_by_num_heavy_atoms(
+    molecules: List[Dict],
+    resid: Dict[Tuple[str, str], Array],
+    heavy_atoms: list[int],
+    show_progress: bool = True,
+) -> pd.DataFrame:
+    """Calculates the heavy-atom conditional RMSE for each method-method combination.
+
+    Args:
+        molecules (List[Dict]): List of molecules dictionaries from ANI-1 data.
+        resid (Dict): Dictionary of residual vectors for each method-method combination.
+        heavy_atoms (list[int]): List of allowed heavy atom numbers.
+        show_progress (bool): Whether to display the TQDM progress bar.
+
+    Returns:
+        pd.DataFrame: Dataframe with the RMSE conditional on heavy atoms for
+        each method-method combination.
+    """
+
+    # TODO: This function can be simplified through vectorization, but is
+    # written this way because of how the method-method residuals are
+    # stored in the resid dictionary.
+    dataframes = []
+
+    for method_pair in tqdm(resid, desc="Computing RMSE", disable=not show_progress):
+        resids_by_heaviness = get_residuals_by_num_heavy_atoms(
+            molecules, resid[method_pair], heavy_atoms
+        )
+
+        rmse_vals = []
+        for num_heavy_atoms in heavy_atoms:
+            rmse_vals.append(rmse(resids_by_heaviness[num_heavy_atoms]))
+
+        method_pair_rmse_df = pd.DataFrame(
+            {
+                "RMSE": rmse_vals,
+                "Heavy Atoms": heavy_atoms,
+                "Method Pair": [method_pair] * len(heavy_atoms),
+            }
+        )
+
+        dataframes.append(method_pair_rmse_df)
+
+    rmse_df = pd.concat(dataframes)
+    return rmse_df
+
+
+def plot_rmse_by_num_heavy_atoms(
+    rmse_df: pd.DataFrame, method_id_to_name: Optional[Dict[str, str]] = None
+) -> None:
+    """Plots the RMSE conditional on heavy atoms for each method-method combination.
+
+    Args:
+        rmse_df (pd.DataFrame): Dataframe with the RMSE conditional on heavy atoms for
+        each method-method combination.
+    """
+
+    for (method1, method2), group in rmse_df.groupby("Method Pair"):
+        if method_id_to_name is not None:
+            method1_full_name = method_id_to_name[method1]
+            method2_full_name = method_id_to_name[method2]
+
+        title = f"RMSE vs. Heavy Atoms ({method1_full_name} - {method2_full_name})"
+        group.plot(x="Heavy Atoms", y="RMSE", title=title)
+        plt.show()
+
+
+def isin_tuple_series(values: Any, tuple_col: pd.Series) -> pd.Series:
+    if isinstance(values, str):
+        values = [values]
+
+    return tuple_col.apply(lambda x: any(val in x for val in values))
+
+
 # %% Main block
 
 # https://drive.google.com/file/d/1SP8SX0v5d1UJAX69GpMV-JtjfUSnf-QB
-ani1_path = "C:/Users/nanja/Box Sync/99519 ML Chem/summer22-analysis/ANI-1ccx_clean_fullentry.h5"
-molecules_path = "../../Data/ani1-extracted.pkl"
+ani1_path = "../data/ANI-1ccx_clean_fullentry.h5"
+molecules_path = "../data/ani1-extracted.pkl"
 
 ani1_config = {
     "allowed_Z": [1, 6, 7, 8],
@@ -306,11 +422,7 @@ ani1_config = {
     "max_config": 1_000_000,
     "target": {
         "dt": "dftb.energy",  # Dftb Total
-        # "de": "dftb.elec_energy",  # Dftb Electronic
-        # "dr": "dftb.rep_energy",  # Dftb Repulsive
         "pt": "dftb_plus.energy",  # dftb Plus Total
-        # "pe": "dftb_plus.elec_energy",  # dftb Plus Electronic
-        # "pr": "dftb_plus.rep_energy",  # dftb Plus Repulsive
         "hd": "hf_dz.energy",  # Hf Dz
         "ht": "hf_tz.energy",
         "hq": "hf_qz.energy",
@@ -349,25 +461,35 @@ molecules = get_ani1data(
 # This is a problem for the OLS solver, so we drop these molecules.
 molecules = [m for m in molecules if not np.isnan(list(m["targets"].values())).any()]
 
+# Precompute the XX matrix for residual calculation -- not required
 XX = build_XX_matrix(molecules, ani1_config["allowed_Z"])
 
 # %%
 
 # Create a heatmap of the MAE between methods
-# fig, ax = plt.subplots(figsize=(15, 15))
-# create_heatmap(
-#     molecules,
-#     ani1_config["target"],
-#     ani1_config["allowed_Z"],
-#     show_progress=True,
-# )
-
-# plt.show()
-
-# Create a boxplot for each MAE between methods
-resid = calc_resid(
-    molecules, ani1_config["target"], ani1_config["allowed_Z"], show_progress=True
+fig, ax = plt.subplots(figsize=(16, 15))
+create_heatmap(
+    molecules,
+    ani1_config["target"],
+    ani1_config["allowed_Z"],
+    show_progress=True,
 )
+
+plt.show()
+
+# %%
+
+# Calculate the residual vector for each method-method combination
+resid = calc_resid(
+    molecules,
+    ani1_config["target"],
+    ani1_config["allowed_Z"],
+    XX=XX,
+    show_progress=True,
+)
+
+# %%
+
 # Original data boxplot
 oriboxfig = plt.figure(figsize=(10, 10))
 data = list(resid.values())
@@ -382,8 +504,21 @@ boxplot_data = list(filtered_data.values())
 boxplot_labels = list(filtered_data.keys())
 plt.boxplot(boxplot_data, labels=boxplot_labels)
 plt.show()
+
+
 # %%
 
-# molecules["H2O"]
+rmse_df = compute_rmse_by_num_heavy_atoms(molecules, resid, ani1_config["heavy_atoms"])
+
+# %%
+
+# Will produce 91 plots, one for each method-method combination
+# plot_rmse_by_num_heavy_atoms(rmse_df)
+
+# Will produce a plot for each dftb-method combination
+plot_rmse_by_num_heavy_atoms(
+    rmse_df[isin_tuple_series("dt", rmse_df["Method Pair"])],
+    method_id_to_name=ani1_config["target"],
+)
 
 # %%
