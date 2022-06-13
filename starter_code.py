@@ -368,11 +368,19 @@ XX = build_XX_matrix(molecules, ani1_config["allowed_Z"])
 resid = calc_resid(
     molecules, ani1_config["target"], ani1_config["allowed_Z"], show_progress=True
 )
+# Original data boxplot
+oriboxfig = plt.figure(figsize=(10, 10))
+data = list(resid.values())
+labels = list(resid.keys())
+plt.boxplot(data, labels=labels)
+plt.show()
+# Filtered data boxplot
 filtered_data = filter_outliers(resid)
 boxfig = plt.figure(figsize=(10, 10))
 plt.subplots(figsize=(15, 15))
 boxplot_data = list(filtered_data.values())
-plt.boxplot(boxplot_data)
+boxplot_labels = list(filtered_data.keys())
+plt.boxplot(boxplot_data, labels=boxplot_labels)
 plt.show()
 # %%
 
