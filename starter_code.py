@@ -258,7 +258,6 @@ def create_heatmap(
 
     # List indices
     target_idx_pairs = list(itertools.combinations(range(n_targets), 2))
-    conversion = 627.50961
 
     if show_progress:
         target_idx_pairs = tqdm(target_idx_pairs)
@@ -269,18 +268,6 @@ def create_heatmap(
     for (idx_1, idx_2), (ind_1, ind_2) in itertools.zip_longest(data_matrix, target_idx_pairs):
         resid = data_matrix[idx_1, idx_2]
         mae_matrix[ind_2, ind_1] = np.mean(np.abs(resid))
-
-    # else:
-    #     for (idx_1, idx_2) in target_idx_pairs:
-    #         # TODO: Refactor this function to use the calc_resid function
-    #         coefs, XX, method1_mat, method2_mat = fit_linear_ref_ener(
-    #             molecules, target_keys[idx_1], target_keys[idx_2], allowed_Z, XX=XX
-    #         )
-    #
-    #         resid = method2_mat - (method1_mat + (XX @ coefs))
-    #         mae_matrix[idx_2, idx_1] = np.mean(np.abs(resid))
-    #
-    #     mae_matrix = mae_matrix * conversion
 
     # Mask for seaborn heatmap, to remove the upper triangular portion,
     # but including the main diagonal
@@ -504,14 +491,14 @@ resid = calc_resid(
 # %% Original Data Visualizations
 
 # Create a heatmap of the MAE between methods
-fig, ax = plt.subplots(figsize=(16, 15))
-create_heatmap(
-    resid,
-    ani1_config["target"],
-    show_progress=True
-)
-
-plt.show()
+# fig, ax = plt.subplots(figsize=(16, 15))
+# create_heatmap(
+#     resid,
+#     ani1_config["target"],
+#     show_progress=True
+# )
+#
+# plt.show()
 
 # Original data boxplot
 # oriboxfig = plt.figure(figsize=(10, 10))
@@ -522,8 +509,9 @@ plt.show()
 
 # %% Filtering Data Visualizations
 
-# # Filtered data boxplot
-# filtered_data = filter_outliers(resid)
+filtered_data = filter_outliers(resid)
+# Filtered data boxplot
+
 # boxfig = plt.figure(figsize=(10, 10))
 # plt.subplots(figsize=(15, 15))
 # boxplot_data = list(filtered_data.values())
@@ -531,15 +519,27 @@ plt.show()
 # plt.boxplot(boxplot_data, labels=boxplot_labels)
 # plt.show()
 
-# todo: heatmap of number of outliers
+# Heatmap of number of outliers
+# Get number of outliers
+n_outliers = {}
+for (target_1, target_2) in resid:
+    n_outliers[target_1, target_2] = len(resid[target_1, target_2]) - len(filtered_data[target_1, target_2])
+# Plot
+outlier_map = plt.subplots(figsize=(16, 15))
+create_heatmap(
+    n_outliers,
+    ani1_config["target"],
+    show_progress=True
+)
+# okay to use create_heatmap since mean of 1 number is just the number
+plt.show()
 
-# TODO: Filtered Data Heatmap
+# Filtered Data Heatmap
 # fig2, ax2 = plt.subplots(figsize=(16, 15))
 # create_heatmap(
 #     filtered_data,
 #     ani1_config["target"],
-#     ani1_config["allowed_Z"],
-#     show_progress=True,
+#     show_progress=True
 # )
 #
 # plt.show()
