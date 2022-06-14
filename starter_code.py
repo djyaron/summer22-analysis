@@ -181,10 +181,24 @@ def calc_resid(
     show_progress: bool = False,
     XX: Optional[Array] = None,
 ) -> Dict[Tuple[str, str], Array]:
+    r"""calculates residuals of the ani1 data set
+
+        Arguments:
+            molecules List[Dict]: From ANI-1 dataset
+            allowed_Z List[int]: The allowed atoms in the molecules
+            target (str): energy targets
+            show_progress (bool): Show TQDM progress bar
+            XX (Optional[Array]): precomputed array to replace molecules
+
+        Returns:
+            resid_matrix Dict: matrix of the residuals between two methods
+
+        Notes:
+            Result is converted to hartrees
+        """
     n_targets = len(target.keys())
 
     target_keys = list(target.keys())
-    target_values = list(target.values())
 
     # List indices
     target_idx_pairs = list(itertools.combinations(range(n_targets), 2))
@@ -211,49 +225,62 @@ def calc_resid(
 
 
 def create_heatmap(
-    molecules: List[Dict],
+    data_matrix: [Dict],
     target: str,
-    allowed_Z: List[int],
+    molecules: Optional[List[Dict]] = None,
+    allowed_Z: Optional[List[int]] = None,
     plot_args: Optional[Dict] = None,
     show_progress: bool = False,
     XX: Optional[Array] = None,
+
 ) -> plt.Axes:
     """Creates a heatmap of the MAE between methods.
 
     Args:
-        molecules (List[Dict]): From ANI-1 dataset
-        target (str): List of method IDs to compare
-        allowed_Z (List[int]): The allowed atoms in the molecules
+        data_matrix: residual matrix
+        target (Optional(str)): List of method IDs to compare
+        molecules (Optional(List[Dict])): From ANI-1 dataset
+        allowed_Z (Optional(List[int])): The allowed atoms in the molecules
         plot_args (Optional[Dict]): Arguments to pass to seaborn heatmap
         show_progress (bool): Show TQDM progress bar
+        XX (Optional[Array]): precomputed array to replace molecules
 
     Returns:
         plt.Axes: Matplotlib axes object
+
+    Notes:
+        Refactored to take in the residual matrix by default
     """
+    target_values = list(target.values())
+
     n_targets = len(target.keys())
     mae_matrix = np.zeros((n_targets, n_targets))
 
-    target_keys = list(target.keys())
-    target_values = list(target.values())
-
     # List indices
     target_idx_pairs = list(itertools.combinations(range(n_targets), 2))
-
     conversion = 627.50961
 
     if show_progress:
         target_idx_pairs = tqdm(target_idx_pairs)
 
-    for (idx_1, idx_2) in target_idx_pairs:
-        # TODO: Refactor this function to use the calc_resid function
-        coefs, XX, method1_mat, method2_mat = fit_linear_ref_ener(
-            molecules, target_keys[idx_1], target_keys[idx_2], allowed_Z, XX=XX
-        )
+    if data_matrix is None:
+        data_matrix = calc_resid(molecules, target, allowed_Z, show_progress=show_progress, XX=XX)
 
-        resid = method2_mat - (method1_mat + (XX @ coefs))
-        mae_matrix[idx_2, idx_1] = np.mean(np.abs(resid))
+    for (idx_1, idx_2), (ind_1, ind_2) in itertools.zip_longest(data_matrix, target_idx_pairs):
+        resid = data_matrix[idx_1, idx_2]
+        mae_matrix[ind_2, ind_1] = np.mean(np.abs(resid))
 
-    mae_matrix = mae_matrix * conversion
+    # else:
+    #     for (idx_1, idx_2) in target_idx_pairs:
+    #         # TODO: Refactor this function to use the calc_resid function
+    #         coefs, XX, method1_mat, method2_mat = fit_linear_ref_ener(
+    #             molecules, target_keys[idx_1], target_keys[idx_2], allowed_Z, XX=XX
+    #         )
+    #
+    #         resid = method2_mat - (method1_mat + (XX @ coefs))
+    #         mae_matrix[idx_2, idx_1] = np.mean(np.abs(resid))
+    #
+    #     mae_matrix = mae_matrix * conversion
 
     # Mask for seaborn heatmap, to remove the upper triangular portion,
     # but including the main diagonal
@@ -410,11 +437,11 @@ def isin_tuple_series(values: Any, tuple_col: pd.Series) -> pd.Series:
     return tuple_col.apply(lambda x: any(val in x for val in values))
 
 
-# %% Main block
+# %% Initialize Data
 
 # https://drive.google.com/file/d/1SP8SX0v5d1UJAX69GpMV-JtjfUSnf-QB
-ani1_path = "../data/ANI-1ccx_clean_fullentry.h5"
-molecules_path = "../data/ani1-extracted.pkl"
+ani1_path = r"C:\Users\nanja\Box Sync\99519 ML Chem\summer22-analysis\ANI-1ccx_clean_fullentry.h5"
+# molecules_path = "../data/ani1-extracted.pkl"
 
 ani1_config = {
     "allowed_Z": [1, 6, 7, 8],
@@ -464,20 +491,6 @@ molecules = [m for m in molecules if not np.isnan(list(m["targets"].values())).a
 # Precompute the XX matrix for residual calculation -- not required
 XX = build_XX_matrix(molecules, ani1_config["allowed_Z"])
 
-# %%
-
-# Create a heatmap of the MAE between methods
-fig, ax = plt.subplots(figsize=(16, 15))
-create_heatmap(
-    molecules,
-    ani1_config["target"],
-    ani1_config["allowed_Z"],
-    show_progress=True,
-)
-
-plt.show()
-
-# %%
 
 # Calculate the residual vector for each method-method combination
 resid = calc_resid(
@@ -488,37 +501,59 @@ resid = calc_resid(
     show_progress=True,
 )
 
-# %%
+# %% Original Data Visualizations
+
+# Create a heatmap of the MAE between methods
+fig, ax = plt.subplots(figsize=(16, 15))
+create_heatmap(
+    resid,
+    ani1_config["target"],
+    show_progress=True
+)
+
+plt.show()
 
 # Original data boxplot
-oriboxfig = plt.figure(figsize=(10, 10))
-data = list(resid.values())
-labels = list(resid.keys())
-plt.boxplot(data, labels=labels)
-plt.show()
-# Filtered data boxplot
-filtered_data = filter_outliers(resid)
-boxfig = plt.figure(figsize=(10, 10))
-plt.subplots(figsize=(15, 15))
-boxplot_data = list(filtered_data.values())
-boxplot_labels = list(filtered_data.keys())
-plt.boxplot(boxplot_data, labels=boxplot_labels)
-plt.show()
+# oriboxfig = plt.figure(figsize=(10, 10))
+# data = list(resid.values())
+# labels = list(resid.keys())
+# plt.boxplot(data, labels=labels)
+# plt.show()
 
+# %% Filtering Data Visualizations
 
-# %%
+# # Filtered data boxplot
+# filtered_data = filter_outliers(resid)
+# boxfig = plt.figure(figsize=(10, 10))
+# plt.subplots(figsize=(15, 15))
+# boxplot_data = list(filtered_data.values())
+# boxplot_labels = list(filtered_data.keys())
+# plt.boxplot(boxplot_data, labels=boxplot_labels)
+# plt.show()
 
-rmse_df = compute_rmse_by_num_heavy_atoms(molecules, resid, ani1_config["heavy_atoms"])
+# todo: heatmap of number of outliers
 
-# %%
+# TODO: Filtered Data Heatmap
+# fig2, ax2 = plt.subplots(figsize=(16, 15))
+# create_heatmap(
+#     filtered_data,
+#     ani1_config["target"],
+#     ani1_config["allowed_Z"],
+#     show_progress=True,
+# )
+#
+# plt.show()
+
+# %% RMSE
+
+# rmse_df = compute_rmse_by_num_heavy_atoms(molecules, resid, ani1_config["heavy_atoms"])
 
 # Will produce 91 plots, one for each method-method combination
 # plot_rmse_by_num_heavy_atoms(rmse_df)
 
 # Will produce a plot for each dftb-method combination
-plot_rmse_by_num_heavy_atoms(
-    rmse_df[isin_tuple_series("dt", rmse_df["Method Pair"])],
-    method_id_to_name=ani1_config["target"],
-)
+# plot_rmse_by_num_heavy_atoms(
+#     rmse_df[isin_tuple_series("dt", rmse_df["Method Pair"])],
+#     method_id_to_name=ani1_config["target"],
+# )
 
-# %%
