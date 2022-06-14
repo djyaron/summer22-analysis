@@ -352,7 +352,9 @@ def compute_rmse_by_num_heavy_atoms(
 
     Returns:
         pd.DataFrame: Dataframe with the RMSE conditional on heavy atoms for
-        each method-method combination.
+        each method-method combination. Also includes STD, which is the standard
+        deviation of the residual vector, and n, which is the number of residuals
+        used in the calculation.
     """
 
     # TODO: This function can be simplified through vectorization, but is
@@ -365,15 +367,29 @@ def compute_rmse_by_num_heavy_atoms(
             molecules, resid[method_pair], heavy_atoms
         )
 
+        # We have about 389 molecules with 1 heavy atom
         rmse_vals = []
+        sd_vals = []
+        num_molecules = []
         for num_heavy_atoms in heavy_atoms:
-            rmse_vals.append(rmse(resids_by_heaviness[num_heavy_atoms]))
+            # resids_by_heaviness[num_heavy_atoms] is a dictionary,
+            # mapping number of heavy atoms to the subset of the molecule-level
+            # residuals corresponding to the molecules with num_heavy_atoms
+            # (for a given method-method pair)
+            rmse_vals.append(
+                rmse(resids_by_heaviness[num_heavy_atoms]) / num_heavy_atoms**0.5
+            )
+
+            sd_vals.append(np.std(resids_by_heaviness[num_heavy_atoms]))
+            num_molecules.append(len(resids_by_heaviness[num_heavy_atoms]))
 
         method_pair_rmse_df = pd.DataFrame(
             {
                 "RMSE": rmse_vals,
                 "Heavy Atoms": heavy_atoms,
                 "Method Pair": [method_pair] * len(heavy_atoms),
+                "STD": sd_vals,
+                "n": num_molecules,
             }
         )
 
@@ -398,8 +414,14 @@ def plot_rmse_by_num_heavy_atoms(
             method1_full_name = method_id_to_name[method1]
             method2_full_name = method_id_to_name[method2]
 
-        title = f"RMSE vs. Heavy Atoms ({method1_full_name} - {method2_full_name})"
-        group.plot(x="Heavy Atoms", y="RMSE", title=title)
+        title = f"RMSE / SE vs. # of Heavy Atoms ({method1_full_name} - {method2_full_name})"
+        # group.plot(x="Heavy Atoms", y="RMSE", title=title)
+        plt.errorbar(
+            x=group["Heavy Atoms"],
+            y=group["RMSE"],
+            yerr=group["STD"] / (group["n"] ** 0.5),
+        )
+        plt.title(title)
         plt.show()
 
 
