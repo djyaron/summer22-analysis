@@ -513,33 +513,33 @@ resid = calc_resid(
 # %% Original Data Visualizations
 
 # Create a heatmap of the MAE between methods
-# fig, ax = plt.subplots(figsize=(16, 15))
-# create_heatmap(
-#     resid,
-#     ani1_config["target"],
-#     show_progress=True
-# )
-#
-# plt.show()
+fig, ax = plt.subplots(figsize=(16, 15))
+create_heatmap(
+    ani1_config["target"],
+    data_matrix=resid,
+    show_progress=True
+)
+
+plt.show()
 
 # Original data boxplot
-# oriboxfig = plt.figure(figsize=(10, 10))
-# data = list(resid.values())
-# labels = list(resid.keys())
-# plt.boxplot(data, labels=labels)
-# plt.show()
+oriboxfig = plt.figure(figsize=(10, 10))
+data = list(resid.values())
+labels = list(resid.keys())
+plt.boxplot(data, labels=labels)
+plt.show()
 
 # %% Filtering Data Visualizations
 
 filtered_data = filter_outliers(resid)
 # Filtered data boxplot
 
-# boxfig = plt.figure(figsize=(10, 10))
-# plt.subplots(figsize=(15, 15))
-# boxplot_data = list(filtered_data.values())
-# boxplot_labels = list(filtered_data.keys())
-# plt.boxplot(boxplot_data, labels=boxplot_labels)
-# plt.show()
+boxfig = plt.figure(figsize=(10, 10))
+plt.subplots(figsize=(15, 15))
+boxplot_data = list(filtered_data.values())
+boxplot_labels = list(filtered_data.keys())
+plt.boxplot(boxplot_data, labels=boxplot_labels)
+plt.show()
 
 # Heatmap of number of outliers
 # Get number of outliers
@@ -549,22 +549,22 @@ for (target_1, target_2) in resid:
 # Plot
 outlier_map = plt.subplots(figsize=(16, 15))
 create_heatmap(
-    n_outliers,
     ani1_config["target"],
+    data_matrix=n_outliers,
     show_progress=True
 )
 # okay to use create_heatmap since mean of 1 number is just the number
 plt.show()
 
 # Filtered Data Heatmap
-# fig2, ax2 = plt.subplots(figsize=(16, 15))
-# create_heatmap(
-#     filtered_data,
-#     ani1_config["target"],
-#     show_progress=True
-# )
-#
-# plt.show()
+fig2, ax2 = plt.subplots(figsize=(16, 15))
+create_heatmap(
+    ani1_config["target"],
+    data_matrix=filtered_data,
+    show_progress=True
+)
+
+plt.show()
 
 # %% RMSE
 
