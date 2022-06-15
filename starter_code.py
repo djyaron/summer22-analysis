@@ -223,10 +223,9 @@ def calc_resid(
 
     return resid_matrix
 
-
 def create_heatmap(
-    data_matrix: [Dict],
     target: str,
+    data_matrix: Optional[List[Dict]] = None,
     molecules: Optional[List[Dict]] = None,
     allowed_Z: Optional[List[int]] = None,
     plot_args: Optional[Dict] = None,
@@ -237,8 +236,8 @@ def create_heatmap(
     """Creates a heatmap of the MAE between methods.
 
     Args:
-        data_matrix: residual matrix
-        target (Optional(str)): List of method IDs to compare
+        target (str): List of method IDs to compare
+        data_matrix (Optional[List[Dict]]): residual matrix
         molecules (Optional(List[Dict])): From ANI-1 dataset
         allowed_Z (Optional(List[int])): The allowed atoms in the molecules
         plot_args (Optional[Dict]): Arguments to pass to seaborn heatmap
@@ -251,6 +250,10 @@ def create_heatmap(
     Notes:
         Refactored to take in the residual matrix by default
     """
+
+    if data_matrix is None and molecules is None:
+        raise ValueError("One of data_matrix or molecules must be provided")
+
     target_values = list(target.values())
 
     n_targets = len(target.keys())
@@ -383,6 +386,7 @@ def compute_rmse_by_num_heavy_atoms(
 
         # We have about 389 molecules with 1 heavy atom
         rmse_vals = []
+        rmse_nh_vals = []
         sd_vals = []
         num_molecules = []
         for num_heavy_atoms in heavy_atoms:
@@ -390,9 +394,9 @@ def compute_rmse_by_num_heavy_atoms(
             # mapping number of heavy atoms to the subset of the molecule-level
             # residuals corresponding to the molecules with num_heavy_atoms
             # (for a given method-method pair)
-            rmse_vals.append(
-                rmse(resids_by_heaviness[num_heavy_atoms]) / num_heavy_atoms**0.5
-            )
+            rmse_val = rmse(resids_by_heaviness[num_heavy_atoms])
+            rmse_vals.append(rmse_val)
+            rmse_nh_vals.append(rmse_val / num_heavy_atoms**0.5)
 
             sd_vals.append(np.std(resids_by_heaviness[num_heavy_atoms]))
             num_molecules.append(len(resids_by_heaviness[num_heavy_atoms]))
@@ -400,6 +404,7 @@ def compute_rmse_by_num_heavy_atoms(
         method_pair_rmse_df = pd.DataFrame(
             {
                 "RMSE": rmse_vals,
+                "RMSE / sqrt(nh)": rmse_nh_vals,
                 "Heavy Atoms": heavy_atoms,
                 "Method Pair": [method_pair] * len(heavy_atoms),
                 "STD": sd_vals,
@@ -428,14 +433,16 @@ def plot_rmse_by_num_heavy_atoms(
             method1_full_name = method_id_to_name[method1]
             method2_full_name = method_id_to_name[method2]
 
-        title = f"RMSE / SE vs. # of Heavy Atoms ({method1_full_name} - {method2_full_name})"
+        title = f"RMSE vs. # of Heavy Atoms ({method1_full_name} - {method2_full_name})"
         # group.plot(x="Heavy Atoms", y="RMSE", title=title)
-        plt.errorbar(
-            x=group["Heavy Atoms"],
-            y=group["RMSE"],
-            yerr=group["STD"] / (group["n"] ** 0.5),
-        )
-        plt.title(title)
+        group.set_index("Heavy Atoms")[["RMSE", "RMSE / sqrt(nh)"]].plot(title=title)
+        # plt.errorbar(
+        #     x=group["Heavy Atoms"],
+        #     y=group["RMSE"],
+        #     yerr=group["STD"] / (group["n"] ** 0.5),
+        # )
+        #
+        # plt.title(title)
         plt.show()
 
 
@@ -449,8 +456,8 @@ def isin_tuple_series(values: Any, tuple_col: pd.Series) -> pd.Series:
 # %% Initialize Data
 
 # https://drive.google.com/file/d/1SP8SX0v5d1UJAX69GpMV-JtjfUSnf-QB
-ani1_path = r"C:\Users\nanja\Box Sync\99519 ML Chem\summer22-analysis\ANI-1ccx_clean_fullentry.h5"
-# molecules_path = "../data/ani1-extracted.pkl"
+ani1_path = "./ANI-1ccx_clean_fullentry.h5"
+# molecules_path = "./ani1-extracted.pkl"
 
 ani1_config = {
     "allowed_Z": [1, 6, 7, 8],
