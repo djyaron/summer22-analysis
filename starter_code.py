@@ -452,6 +452,20 @@ def isin_tuple_series(values: Any, tuple_col: pd.Series) -> pd.Series:
 
     return tuple_col.apply(lambda x: any(val in x for val in values))
 
+def create_boxplot(boxplot_data: Dict, title: str, method: Optional[str] = None, plot_args: Optional[Dict] = None):
+    oriboxfig = plt.figure(figsize=(10, 10))
+    if method is not None:
+        boxplot_data = {key: value for key, value in boxplot_data.items() if method in key}
+        if not boxplot_data:
+            raise ValueError("Method not found in boxplot_data")
+
+    data = list(boxplot_data.values())
+    labels = list(boxplot_data.keys())
+    plt.boxplot(data, labels=labels, **(plot_args or {}))
+    plt.title(f"{title} for {method}")
+    plt.xticks(rotation=90)
+    plt.show()
+
 
 # %% Initialize Data
 
@@ -520,58 +534,49 @@ resid = calc_resid(
 # %% Original Data Visualizations
 
 # Create a heatmap of the MAE between methods
-fig, ax = plt.subplots(figsize=(16, 15))
-create_heatmap(
-    ani1_config["target"],
-    data_matrix=resid,
-    show_progress=True
-)
-
-plt.show()
+# fig, ax = plt.subplots(figsize=(16, 15))
+# create_heatmap(
+#     ani1_config["target"],
+#     data
+#     show_progress=True
+# )
+#
+# plt.show()
 
 # Original data boxplot
-oriboxfig = plt.figure(figsize=(10, 10))
-data = list(resid.values())
-labels = list(resid.keys())
-plt.boxplot(data, labels=labels)
-plt.show()
+create_boxplot(resid, "Original Data Spread", 'dt')
 
 # %% Filtering Data Visualizations
 
 filtered_data = filter_outliers(resid)
 # Filtered data boxplot
+create_boxplot(filtered_data, "Filtered Data Spread", 'dt')
 
-boxfig = plt.figure(figsize=(10, 10))
-plt.subplots(figsize=(15, 15))
-boxplot_data = list(filtered_data.values())
-boxplot_labels = list(filtered_data.keys())
-plt.boxplot(boxplot_data, labels=boxplot_labels)
-plt.show()
 
 # Heatmap of number of outliers
 # Get number of outliers
-n_outliers = {}
-for (target_1, target_2) in resid:
-    n_outliers[target_1, target_2] = len(resid[target_1, target_2]) - len(filtered_data[target_1, target_2])
-# Plot
-outlier_map = plt.subplots(figsize=(16, 15))
-create_heatmap(
-    ani1_config["target"],
-    data_matrix=n_outliers,
-    show_progress=True
-)
-# okay to use create_heatmap since mean of 1 number is just the number
-plt.show()
+# n_outliers = {}
+# for (target_1, target_2) in resid:
+#     n_outliers[target_1, target_2] = len(resid[target_1, target_2]) - len(filtered_data[target_1, target_2])
+# # Plot
+# outlier_map = plt.subplots(figsize=(16, 15))
+# create_heatmap(
+#     ani1_config["target"],
+#     data_matrix=n_outliers,
+#     show_progress=True
+# )
+# # okay to use create_heatmap since mean of 1 number is just the number
+# plt.show()
 
 # Filtered Data Heatmap
-fig2, ax2 = plt.subplots(figsize=(16, 15))
-create_heatmap(
-    ani1_config["target"],
-    data_matrix=filtered_data,
-    show_progress=True
-)
-
-plt.show()
+# fig2, ax2 = plt.subplots(figsize=(16, 15))
+# create_heatmap(
+#     ani1_config["target"],
+#     data_matrix=filtered_data,
+#     show_progress=True
+# )
+#
+# plt.show()
 
 # %% RMSE
 
