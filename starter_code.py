@@ -15,7 +15,7 @@ import itertools
 import os
 import pickle
 from collections import Counter
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -26,6 +26,10 @@ import matplotlib.pyplot as plt
 import re
 
 from tqdm import tqdm
+
+from copy import copy
+from typing import Optional
+
 
 Array = np.ndarray
 
@@ -201,14 +205,15 @@ def calc_resid(
     molecules: List[Dict],
     target: str = ani1_config["target"],
     allowed_Z: List[int] = ani1_config["allowed_Z"],
-    show_progress: bool = False,
+    show_progress: bool = True,
     XX: Optional[Array] = None,
-) -> Dict[Tuple[str, str], Array]:
+    as_dataframe: bool = False,
+) -> Union[Dict, pd.DataFrame]:
     r"""calculates residuals of the ani1 data set
 
     Arguments:
-        molecules List[Dict]: From ANI-1 dataset
-        allowed_Z List[int]: The allowed atoms in the molecules
+        molecules (List[Dict]): From ANI-1 dataset
+        allowed_Z (List[int]): The allowed atoms in the molecules
         target (str): energy targets
         show_progress (bool): Show TQDM progress bar
         XX (Optional[Array]): precomputed array to replace molecules
@@ -219,17 +224,15 @@ def calc_resid(
     Notes:
         Result is converted to hartrees
     """
+    conversion = 627.50961
     n_targets = len(target.keys())
-
     target_keys = list(target.keys())
 
     # List indices
     target_idx_pairs = list(itertools.combinations(range(n_targets), 2))
 
-    conversion = 627.50961
-
     if show_progress:
-        target_idx_pairs = tqdm(target_idx_pairs)
+        target_idx_pairs = tqdm(target_idx_pairs, desc="Calculating residuals")
 
     resid_matrix = {}
 
@@ -244,7 +247,14 @@ def calc_resid(
         target_2_name = target_keys[idx_2]
         resid_matrix[(target_1_name, target_2_name)] = resid
 
-    return resid_matrix
+    if not as_dataframe:
+        return resid_matrix
+    else:
+        result = pd.DataFrame.from_records(resid_matrix)
+        result["name"] = [m["name"] for m in molecules]
+        result["iconfig"] = [m["iconfig"] for m in molecules]
+        result = result.set_index(["name", "iconfig"])
+        return result
 
 
 def create_heatmap(
@@ -502,8 +512,69 @@ def create_boxplot(
     plt.show()
 
 
+def unnest_dictionary(
+    data: dict, key: str, prefix: str = "", inplace: bool = False
+) -> Optional[dict]:
+    """Insert the keys of a sub-dictionary into data dictionary.
+
+    Args:
+        data (dict): Main dictionary to unnest.
+        key (str): The key of the sub-dictionary to unnest.
+        prefix (str, optional): String value to prefix the new keys with. Defaults to "".
+        inplace (bool, optional): Modify the dictionary in place if True, else return a copy. Defaults to False.
+
+    Returns:
+        Optional[dict]: The modified dictionary if inplace is False, else None.
+    """
+    value = data.get(key)
+
+    # Do nothing if the key does not exist or the value is not a dictionary
+    if not isinstance(value, dict):
+        return data
+
+    if not inplace:
+        data = copy(data)
+
+    # Remove the key from the dictionary
+    del data[key]
+
+    for k, v in value.items():
+        data[f"{prefix}{k}"] = v
+
+    return None if inplace else data
+
+
+def convert_ani1_data_to_dataframe(data: List[Dict]) -> pd.DataFrame:
+    """Converts ANI1 data to a dataframe.
+
+    Args:
+        data (List[Dict]): List of dictionaries containing ANI1 data.
+
+                    'name': str with name ANI1 assigns to this molecule type
+                    'iconfig': int with number ANI1 assignes to this structure
+                    'atomic_numbers': List of Zs
+                    'coordinates': numpy array (:,3) with cartesian coordinates
+                    'targets': Dict whose keys are the target_names in the
+                        target argument and whose values are numpy arrays
+                        with the ANI-1 data
+
+    Returns:
+        pd.DataFrame: A dataframe with the columns 'name', 'iconfig',
+            'atomic_numbers', and 'coordinates' from the input data. For each target
+            in the input data, a column with the target name is added to the
+            dataframe with the prefix 'target_'.
+    """
+    data_unnested_targets = [
+        unnest_dictionary(mol, "targets", prefix="target_") for mol in data
+    ]
+    df = pd.DataFrame().from_records(data_unnested_targets)
+    return df
+
+
 def load_ani1_data(
-    config: Dict = ani1_config, ani1_path: str = "./ANI-1ccx_clean_fullentry.h5"
+    config: Dict = ani1_config,
+    ani1_path: str = "./ANI-1ccx_clean_fullentry.h5",
+    as_dataframe=False,
 ) -> List[Dict]:
 
     molecules = get_ani1data(
@@ -519,5 +590,8 @@ def load_ani1_data(
     molecules = [
         m for m in molecules if not np.isnan(list(m["targets"].values())).any()
     ]
+
+    if as_dataframe:
+        return convert_ani1_data_to_dataframe(molecules)
 
     return molecules
