@@ -30,6 +30,29 @@ from tqdm import tqdm
 Array = np.ndarray
 
 
+ani1_config = {
+    "allowed_Z": [1, 6, 7, 8],
+    "heavy_atoms": list(range(1, 9)),
+    "max_config": 1_000_000,
+    "target": {
+        "dt": "dftb.energy",  # Dftb Total
+        "pt": "dftb_plus.energy",  # dftb Plus Total
+        "hd": "hf_dz.energy",  # Hf Dz
+        "ht": "hf_tz.energy",
+        "hq": "hf_qz.energy",
+        "wd": "wb97x_dz.energy",  # Wb97x Dz
+        "wt": "wb97x_tz.energy",
+        "md": "mp2_dz.energy",  # Mp2 Dz
+        "mt": "mp2_tz.energy",
+        "mq": "mp2_qz.energy",
+        "td": "tpno_ccsd(t)_dz.energy",  # Tpno Dz
+        "nd": "npno_ccsd(t)_dz.energy",  # Npno Dz
+        "nt": "npno_ccsd(t)_tz.energy",
+        "cc": "ccsd(t)_cbs.energy",
+    },
+}
+
+
 # %% Code behind
 
 
@@ -176,26 +199,26 @@ def get_ani1data_cached(
 
 def calc_resid(
     molecules: List[Dict],
-    target: str,
-    allowed_Z: List[int],
+    target: str = ani1_config["target"],
+    allowed_Z: List[int] = ani1_config["allowed_Z"],
     show_progress: bool = False,
     XX: Optional[Array] = None,
 ) -> Dict[Tuple[str, str], Array]:
     r"""calculates residuals of the ani1 data set
 
-        Arguments:
-            molecules List[Dict]: From ANI-1 dataset
-            allowed_Z List[int]: The allowed atoms in the molecules
-            target (str): energy targets
-            show_progress (bool): Show TQDM progress bar
-            XX (Optional[Array]): precomputed array to replace molecules
+    Arguments:
+        molecules List[Dict]: From ANI-1 dataset
+        allowed_Z List[int]: The allowed atoms in the molecules
+        target (str): energy targets
+        show_progress (bool): Show TQDM progress bar
+        XX (Optional[Array]): precomputed array to replace molecules
 
-        Returns:
-            resid_matrix Dict: matrix of the residuals between two methods
+    Returns:
+        resid_matrix Dict: matrix of the residuals between two methods
 
-        Notes:
-            Result is converted to hartrees
-        """
+    Notes:
+        Result is converted to hartrees
+    """
     n_targets = len(target.keys())
 
     target_keys = list(target.keys())
@@ -223,6 +246,7 @@ def calc_resid(
 
     return resid_matrix
 
+
 def create_heatmap(
     target: str,
     data_matrix: Optional[List[Dict]] = None,
@@ -231,7 +255,6 @@ def create_heatmap(
     plot_args: Optional[Dict] = None,
     show_progress: bool = False,
     XX: Optional[Array] = None,
-
 ) -> plt.Axes:
     """Creates a heatmap of the MAE between methods.
 
@@ -266,9 +289,13 @@ def create_heatmap(
         target_idx_pairs = tqdm(target_idx_pairs)
 
     if data_matrix is None:
-        data_matrix = calc_resid(molecules, target, allowed_Z, show_progress=show_progress, XX=XX)
+        data_matrix = calc_resid(
+            molecules, target, allowed_Z, show_progress=show_progress, XX=XX
+        )
 
-    for (idx_1, idx_2), (ind_1, ind_2) in itertools.zip_longest(data_matrix, target_idx_pairs):
+    for (idx_1, idx_2), (ind_1, ind_2) in itertools.zip_longest(
+        data_matrix, target_idx_pairs
+    ):
         resid = data_matrix[idx_1, idx_2]
         mae_matrix[ind_2, ind_1] = np.mean(np.abs(resid))
 
@@ -452,10 +479,18 @@ def isin_tuple_series(values: Any, tuple_col: pd.Series) -> pd.Series:
 
     return tuple_col.apply(lambda x: any(val in x for val in values))
 
-def create_boxplot(boxplot_data: Dict, title: str, method: Optional[str] = None, plot_args: Optional[Dict] = None):
+
+def create_boxplot(
+    boxplot_data: Dict,
+    title: str,
+    method: Optional[str] = None,
+    plot_args: Optional[Dict] = None,
+):
     oriboxfig = plt.figure(figsize=(10, 10))
     if method is not None:
-        boxplot_data = {key: value for key, value in boxplot_data.items() if method in key}
+        boxplot_data = {
+            key: value for key, value in boxplot_data.items() if method in key
+        }
         if not boxplot_data:
             raise ValueError("Method not found in boxplot_data")
 
@@ -467,127 +502,22 @@ def create_boxplot(boxplot_data: Dict, title: str, method: Optional[str] = None,
     plt.show()
 
 
-# %% Initialize Data
+def load_ani1_data(
+    config: Dict = ani1_config, ani1_path: str = "./ANI-1ccx_clean_fullentry.h5"
+) -> List[Dict]:
 
-# https://drive.google.com/file/d/1SP8SX0v5d1UJAX69GpMV-JtjfUSnf-QB
-ani1_path = "./ANI-1ccx_clean_fullentry.h5"
-# molecules_path = "./ani1-extracted.pkl"
+    molecules = get_ani1data(
+        allowed_Z=config["allowed_Z"],
+        heavy_atoms=config["heavy_atoms"],
+        max_config=config["max_config"],
+        target=config["target"],
+        ani1_path=ani1_path,
+    )
 
-ani1_config = {
-    "allowed_Z": [1, 6, 7, 8],
-    "heavy_atoms": list(range(1, 9)),
-    "max_config": 1_000_000,
-    "target": {
-        "dt": "dftb.energy",  # Dftb Total
-        "pt": "dftb_plus.energy",  # dftb Plus Total
-        "hd": "hf_dz.energy",  # Hf Dz
-        "ht": "hf_tz.energy",
-        "hq": "hf_qz.energy",
-        "wd": "wb97x_dz.energy",  # Wb97x Dz
-        "wt": "wb97x_tz.energy",
-        "md": "mp2_dz.energy",  # Mp2 Dz
-        "mt": "mp2_tz.energy",
-        "mq": "mp2_qz.energy",
-        "td": "tpno_ccsd(t)_dz.energy",  # Tpno Dz
-        "nd": "npno_ccsd(t)_dz.energy",  # Npno Dz
-        "nt": "npno_ccsd(t)_tz.energy",
-        "cc": "ccsd(t)_cbs.energy",
-    },
-}
+    # Some of the molecules have NaN values for some of the targets.
+    # This is a problem for the OLS solver, so we drop these molecules.
+    molecules = [
+        m for m in molecules if not np.isnan(list(m["targets"].values())).any()
+    ]
 
-molecules = get_ani1data(
-    allowed_Z=ani1_config["allowed_Z"],
-    heavy_atoms=ani1_config["heavy_atoms"],
-    max_config=ani1_config["max_config"],
-    target=ani1_config["target"],
-    ani1_path=ani1_path,
-)
-
-# This will read the molecules pickle
-# molecules = get_ani1data_cached(
-#     ani1_path,
-#     molecules_path,
-#     allowed_Z=list(range(1, 10)),
-#     heavy_atoms=list(range(1, 10)),
-#     max_config=10,
-#     target=target,
-#     ani1_path=ani1_path,
-# )
-
-# Some of the molecules have NaN values for some of the targets.
-# This is a problem for the OLS solver, so we drop these molecules.
-molecules = [m for m in molecules if not np.isnan(list(m["targets"].values())).any()]
-
-# Precompute the XX matrix for residual calculation -- not required
-XX = build_XX_matrix(molecules, ani1_config["allowed_Z"])
-
-
-# Calculate the residual vector for each method-method combination
-resid = calc_resid(
-    molecules,
-    ani1_config["target"],
-    ani1_config["allowed_Z"],
-    XX=XX,
-    show_progress=True,
-)
-
-# %% Original Data Visualizations
-
-# Create a heatmap of the MAE between methods
-# fig, ax = plt.subplots(figsize=(16, 15))
-# create_heatmap(
-#     ani1_config["target"],
-#     data
-#     show_progress=True
-# )
-#
-# plt.show()
-
-# Original data boxplot
-create_boxplot(resid, "Original Data Spread", 'dt')
-
-# %% Filtering Data Visualizations
-
-filtered_data = filter_outliers(resid)
-# Filtered data boxplot
-create_boxplot(filtered_data, "Filtered Data Spread", 'dt')
-
-
-# Heatmap of number of outliers
-# Get number of outliers
-# n_outliers = {}
-# for (target_1, target_2) in resid:
-#     n_outliers[target_1, target_2] = len(resid[target_1, target_2]) - len(filtered_data[target_1, target_2])
-# # Plot
-# outlier_map = plt.subplots(figsize=(16, 15))
-# create_heatmap(
-#     ani1_config["target"],
-#     data_matrix=n_outliers,
-#     show_progress=True
-# )
-# # okay to use create_heatmap since mean of 1 number is just the number
-# plt.show()
-
-# Filtered Data Heatmap
-# fig2, ax2 = plt.subplots(figsize=(16, 15))
-# create_heatmap(
-#     ani1_config["target"],
-#     data_matrix=filtered_data,
-#     show_progress=True
-# )
-#
-# plt.show()
-
-# %% RMSE
-
-# rmse_df = compute_rmse_by_num_heavy_atoms(molecules, resid, ani1_config["heavy_atoms"])
-
-# Will produce 91 plots, one for each method-method combination
-# plot_rmse_by_num_heavy_atoms(rmse_df)
-
-# Will produce a plot for each dftb-method combination
-# plot_rmse_by_num_heavy_atoms(
-#     rmse_df[isin_tuple_series("dt", rmse_df["Method Pair"])],
-#     method_id_to_name=ani1_config["target"],
-# )
-
+    return molecules
