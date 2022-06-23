@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
+import statistics as stats
 
 from ani1_interface import get_ani1data
 import seaborn as sns
@@ -329,13 +330,16 @@ def create_heatmap(
 
 
 def filter_outliers(
-        data_matrix: Optional[Dict[Tuple[str, str], Array]] = None,
-        dataframe: Optional[Union[DataFrame, Series]] = None,
-        q_lower: float = 0.25, q_upper: float = 0.75
+        filter_type: str = "SD",
+        data_matrix: Dict[Tuple[str, str], Array] = None,
+        dataframe: Union[DataFrame, Series] = None,
+        q_lower: float = 0.25, q_upper: float = 0.75, n_sd: int = 20
 ) -> Any:
     """Filters outliers from each element in the dataset
 
     Arguments:
+        n_sd (int): the number of standard deviations
+        filter_type (str): "SD" for standard deviation IQR for IQR method
         data_matrix (Optional(Dict)): dictionary with the mean absolute error
         dataframe (Optional[Union[DataFrame, Series]]): dataframe from molecules
         q_lower (float): lower quantile
@@ -351,11 +355,21 @@ def filter_outliers(
 
     if data_matrix is not None:
         filtered_dict = {}
+        upper_bound = 0
+        lower_bound = 0
         for (target1, target2), resid in data_matrix.items():
-            q1, q3 = np.percentile(resid, [25, 75])
-            iqr = q3 - q1
-            upper_bound = q3 + 1.5 * iqr
-            lower_bound = q1 - 1.5 * iqr
+            if filter_type == "SD":
+                sd = stats.stdev(resid)
+                mean = stats.mean(resid)
+
+                upper_bound = mean + n_sd*sd
+                lower_bound = mean - n_sd*sd
+            if filter_type == "IQR":
+                q1, q3 = np.percentile(resid, [25, 75])
+                iqr = q3 - q1
+
+                upper_bound = q3 + 1.5 * iqr
+                lower_bound = q1 - 1.5 * iqr
 
             filtered_element = resid[resid < upper_bound]
             filtered_element = filtered_element[filtered_element > lower_bound]
@@ -364,15 +378,12 @@ def filter_outliers(
         return filtered_dict
 
     elif dataframe is not None:
-        return (dataframe < dataframe.quantile(q_lower)) | (dataframe > dataframe.quantile(q_upper))
+        if filter_type == "SD":
+            return (dataframe < n_sd * dataframe.std()) | (dataframe > n_sd * dataframe.std())
+        if filter_type == "IQR":
+            return (dataframe < dataframe.quantile(q_lower)) | (dataframe > dataframe.quantile(q_upper))
     else:
         raise ValueError("One of data_matrix or dataframe must be provided")
-
-
-def is_outlier(
-        x: Union[DataFrame, Series], q_lower: float = 0.25, q_upper: float = 0.75
-) -> Union[DataFrame, Series]:
-    return (x < x.quantile(q_lower)) | (x > x.quantile(q_upper))
 
 
 # Functions for heavy atom residual analysis
