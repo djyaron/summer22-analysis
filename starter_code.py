@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
+import statistics as stats
 
 from ani1_interface import get_ani1data
 import seaborn as sns
@@ -332,13 +333,18 @@ def create_heatmap(
 
 
 def filter_outliers(
-    data_matrix: Optional[Dict[Tuple[str, str], Array]] = None,
-    dataframe: Optional[Union[DataFrame, Series]] = None,
-        q_lower: float = 0.25, q_upper: float = 0.75
+    filter_type: str = "SD",
+    data_matrix: Dict[Tuple[str, str], Array] = None,
+    dataframe: Union[DataFrame, Series] = None,
+    q_lower: float = 0.25,
+    q_upper: float = 0.75,
+    n_sd: int = 20,
 ) -> Any:
     """Filters outliers from each element in the dataset
 
     Arguments:
+        n_sd (int): the number of standard deviations
+        filter_type (str): "SD" for standard deviation IQR for IQR method
         data_matrix (Optional(Dict)): dictionary with the mean absolute error
         dataframe (Optional[Union[DataFrame, Series]]): dataframe from molecules
         q_lower (float): lower quantile
@@ -354,11 +360,21 @@ def filter_outliers(
 
     if data_matrix is not None:
         filtered_dict = {}
+        upper_bound = 0
+        lower_bound = 0
         for (target1, target2), resid in data_matrix.items():
-            q1, q3 = np.percentile(resid, [25, 75])
-            iqr = q3 - q1
-            upper_bound = q3 + 1.5 * iqr
-            lower_bound = q1 - 1.5 * iqr
+            if filter_type == "SD":
+                sd = stats.stdev(resid)
+                mean = stats.mean(resid)
+
+                upper_bound = mean + n_sd * sd
+                lower_bound = mean - n_sd * sd
+            if filter_type == "IQR":
+                q1, q3 = np.percentile(resid, [25, 75])
+                iqr = q3 - q1
+
+                upper_bound = q3 + 1.5 * iqr
+                lower_bound = q1 - 1.5 * iqr
 
             filtered_element = resid[resid < upper_bound]
             filtered_element = filtered_element[filtered_element > lower_bound]
@@ -367,7 +383,14 @@ def filter_outliers(
         return filtered_dict
 
     elif dataframe is not None:
-        return (dataframe < dataframe.quantile(q_lower)) | (dataframe > dataframe.quantile(q_upper))
+        if filter_type == "SD":
+            return (dataframe < n_sd * dataframe.std()) | (
+                dataframe > n_sd * dataframe.std()
+            )
+        if filter_type == "IQR":
+            return (dataframe < dataframe.quantile(q_lower)) | (
+                dataframe > dataframe.quantile(q_upper)
+            )
     else:
         raise ValueError("One of data_matrix or dataframe must be provided")
 
@@ -489,7 +512,7 @@ def compute_rmse_by_num_heavy_atoms(
         rmse_nh_vals = []
         sd_vals = []
         num_molecules = []
-        
+
         for num_heavy_atoms in heavy_atoms:
             # resids_by_heaviness[num_heavy_atoms] is a dictionary,
             # mapping number of heavy atoms to the subset of the molecule-level
@@ -497,7 +520,7 @@ def compute_rmse_by_num_heavy_atoms(
             # (for a given method-method pair)
             rmse_val = rmse(resids_by_heaviness[num_heavy_atoms])
             rmse_vals.append(rmse_val)
-            rmse_nh_vals.append(rmse_val / num_heavy_atoms ** 0.5)
+            rmse_nh_vals.append(rmse_val / num_heavy_atoms**0.5)
 
             sd_vals.append(np.std(resids_by_heaviness[num_heavy_atoms]))
             num_molecules.append(len(resids_by_heaviness[num_heavy_atoms]))
@@ -579,10 +602,7 @@ def create_boxplot(
     plt.show()
 
 
-def create_histogram(
-        data: DataFrame,
-        plot_args: Optional[Dict] = None
-):
+def create_histogram(data: DataFrame, plot_args: Optional[Dict] = None):
     """Filters outliers from each element in the dataset
 
     Arguments:
