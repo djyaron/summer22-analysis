@@ -32,6 +32,9 @@ from tqdm import tqdm
 from copy import copy
 from typing import Optional
 
+from scipy.spatial.distance import cdist
+import numpy as np
+
 Array = np.ndarray
 
 ani1_config = {
@@ -77,11 +80,11 @@ def build_XX_matrix(dataset: List[Dict], allowed_Zs: List[int]) -> Array:
 
 
 def fit_linear_ref_ener(
-        dataset: List[Dict],
-        target1: str,
-        target2: str,
-        allowed_Zs: List[int],
-        XX: Optional[Array] = None,
+    dataset: List[Dict],
+    target1: str,
+    target2: str,
+    allowed_Zs: List[int],
+    XX: Optional[Array] = None,
 ) -> Array:
     r"""Fits a linear reference energy model between the DFTB+ method and some
         energy target
@@ -159,13 +162,13 @@ working is up to your group.
 
 
 def get_ani1data_cached(
-        ani1_path: str,
-        molecules_path: str,
-        allowed_Z: List[int],
-        heavy_atoms: List[int],
-        max_config: int,
-        target: Dict[str, str],
-        **kwargs,
+    ani1_path: str,
+    molecules_path: str,
+    allowed_Z: List[int],
+    heavy_atoms: List[int],
+    max_config: int,
+    target: Dict[str, str],
+    **kwargs,
 ) -> List[Dict]:
     r"""Loads the ani1 data file and returns the molecules in the file
 
@@ -202,12 +205,12 @@ def get_ani1data_cached(
 
 
 def calc_resid(
-        molecules: List[Dict],
-        target: str = ani1_config["target"],
-        allowed_Z: List[int] = ani1_config["allowed_Z"],
-        show_progress: bool = True,
-        XX: Optional[Array] = None,
-        as_dataframe: bool = False,
+    molecules: List[Dict],
+    target: str = ani1_config["target"],
+    allowed_Z: List[int] = ani1_config["allowed_Z"],
+    show_progress: bool = True,
+    XX: Optional[Array] = None,
+    as_dataframe: bool = False,
 ) -> Union[Dict, pd.DataFrame]:
     r"""calculates residuals of the ani1 data set
 
@@ -258,14 +261,14 @@ def calc_resid(
 
 
 def create_heatmap(
-        target: str,
-        title: str,
-        data_matrix: Optional[List[Dict]] = None,
-        molecules: Optional[List[Dict]] = None,
-        allowed_Z: Optional[List[int]] = None,
-        plot_args: Optional[Dict] = None,
-        show_progress: bool = False,
-        XX: Optional[Array] = None,
+    target: str,
+    title: str,
+    data_matrix: Optional[List[Dict]] = None,
+    molecules: Optional[List[Dict]] = None,
+    allowed_Z: Optional[List[int]] = None,
+    plot_args: Optional[Dict] = None,
+    show_progress: bool = False,
+    XX: Optional[Array] = None,
 ):
     """Creates a heatmap of the MAE between methods.
 
@@ -306,7 +309,7 @@ def create_heatmap(
         )
 
     for (idx_1, idx_2), (ind_1, ind_2) in itertools.zip_longest(
-            data_matrix, target_idx_pairs
+        data_matrix, target_idx_pairs
     ):
         resid = data_matrix[idx_1, idx_2]
         mae_matrix[ind_2, ind_1] = np.mean(np.abs(resid))
@@ -329,8 +332,8 @@ def create_heatmap(
 
 
 def filter_outliers(
-        data_matrix: Optional[Dict[Tuple[str, str], Array]] = None,
-        dataframe: Optional[Union[DataFrame, Series]] = None,
+    data_matrix: Optional[Dict[Tuple[str, str], Array]] = None,
+    dataframe: Optional[Union[DataFrame, Series]] = None,
         q_lower: float = 0.25, q_upper: float = 0.75
 ) -> Any:
     """Filters outliers from each element in the dataset
@@ -370,7 +373,7 @@ def filter_outliers(
 
 
 def is_outlier(
-        x: Union[DataFrame, Series], q_lower: float = 0.25, q_upper: float = 0.75
+    x: Union[DataFrame, Series], q_lower: float = 0.25, q_upper: float = 0.75
 ) -> Union[DataFrame, Series]:
     return (x < x.quantile(q_lower)) | (x > x.quantile(q_upper))
 
@@ -385,7 +388,7 @@ def num_heavy_atoms(name: str) -> int:
 
 
 def get_residuals_by_num_heavy_atoms(
-        molecules: List[Dict], residuals: Array, heavy_atoms: list[int]
+    molecules: List[Dict], residuals: Array, heavy_atoms: list[int]
 ) -> Dict:
     molecules_by_heavy_atoms = {x: [] for x in heavy_atoms}
 
@@ -412,11 +415,46 @@ def rmse(y: Array, y_pred: Optional[Array] = None) -> float:
     return rmse
 
 
+ATOM_PAIR_TO_BOND_ANGSTROM = {
+    frozenset([1, 6]): (0.95, 1.70),
+    frozenset([1, 7]): (0.95, 1.50),
+    frozenset([1, 8]): (0.90, 1.50),
+    frozenset([6, 6]): (1.00, 1.90),
+    frozenset([6, 7]): (1.10, 1.80),
+    frozenset([6, 8]): (1.10, 1.75),
+}
+
+
+def bonds_from_coordinates(coordinates, atomic_numbers):
+    pairwise_distance = cdist(coordinates, coordinates)
+
+    bonds = []
+    # Loop through combinations of atoms in the molecule
+    # Only need to look at one half of the (symmetric) pairwise distance matrix
+    # And we don't care about the diagonal either
+    for i, j in zip(*np.triu_indices_from(pairwise_distance, k=1)):
+        atom_atom_distance = pairwise_distance[i, j]
+        atomic_number_pair = frozenset([atomic_numbers[i], atomic_numbers[j]])
+        bond_length_min_max = ATOM_PAIR_TO_BOND_ANGSTROM.get(atomic_number_pair)
+
+        # If we have the current atom-atom pair in the bond length lookup table,
+        # check if the distance is within the allowed range
+        if bond_length_min_max is not None:
+            bond_length_min, bond_length_max = bond_length_min_max
+            if bond_length_min < atom_atom_distance < bond_length_max:
+                # print(
+                #     f"{atom_types[atomic_numbers[i]]}-{atom_types[atomic_numbers[j]]} bond"
+                # )
+                bonds.append((i, j))
+
+    return bonds
+
+
 def compute_rmse_by_num_heavy_atoms(
-        molecules: List[Dict],
-        resid: Dict[Tuple[str, str], Array],
-        heavy_atoms: list[int],
-        show_progress: bool = True,
+    molecules: List[Dict],
+    resid: Dict[Tuple[str, str], Array],
+    heavy_atoms: list[int],
+    show_progress: bool = True,
 ) -> pd.DataFrame:
     """Calculates the heavy-atom conditional RMSE for each method-method combination.
 
@@ -438,7 +476,10 @@ def compute_rmse_by_num_heavy_atoms(
     # stored in the resid dictionary.
     dataframes = []
 
-    for method_pair in tqdm(resid, desc="Computing RMSE", disable=not show_progress):
+    method_pairs = list(resid.keys())
+    for method_pair in tqdm(
+        method_pairs, desc="Computing RMSE", disable=not show_progress
+    ):
         resids_by_heaviness = get_residuals_by_num_heavy_atoms(
             molecules, resid[method_pair], heavy_atoms
         )
@@ -448,6 +489,7 @@ def compute_rmse_by_num_heavy_atoms(
         rmse_nh_vals = []
         sd_vals = []
         num_molecules = []
+        
         for num_heavy_atoms in heavy_atoms:
             # resids_by_heaviness[num_heavy_atoms] is a dictionary,
             # mapping number of heavy atoms to the subset of the molecule-level
@@ -478,7 +520,7 @@ def compute_rmse_by_num_heavy_atoms(
 
 
 def plot_rmse_by_num_heavy_atoms(
-        rmse_df: pd.DataFrame, method_id_to_name: Optional[Dict[str, str]] = None
+    rmse_df: pd.DataFrame, method_id_to_name: Optional[Dict[str, str]] = None
 ) -> None:
     """Plots the RMSE conditional on heavy atoms for each method-method combination.
 
@@ -491,6 +533,9 @@ def plot_rmse_by_num_heavy_atoms(
         if method_id_to_name is not None:
             method1_full_name = method_id_to_name[method1]
             method2_full_name = method_id_to_name[method2]
+        else:
+            method1_full_name = method1
+            method2_full_name = method2
 
         title = f"RMSE vs. # of Heavy Atoms ({method1_full_name} - {method2_full_name})"
         # group.plot(x="Heavy Atoms", y="RMSE", title=title)
@@ -513,10 +558,10 @@ def isin_tuple_series(values: Any, tuple_col: pd.Series) -> pd.Series:
 
 
 def create_boxplot(
-        boxplot_data: Dict,
-        title: str,
-        method: Optional[str] = None,
-        plot_args: Optional[Dict] = None,
+    boxplot_data: Dict,
+    title: str,
+    method: Optional[str] = None,
+    plot_args: Optional[Dict] = None,
 ):
     oriboxfig = plt.figure(figsize=(10, 10))
     if method is not None:
@@ -540,25 +585,25 @@ def create_histogram(
 ):
     """Filters outliers from each element in the dataset
 
-        Arguments:
-            data (DataFrame): FILTERED data dataframe--must already count the number of outliers
-            plot_args (Optional[Dict]): additional args for the histogram
+    Arguments:
+        data (DataFrame): FILTERED data dataframe--must already count the number of outliers
+        plot_args (Optional[Dict]): additional args for the histogram
 
 
-        Returns:
-            Nothing
+    Returns:
+        Nothing
 
-        Notes: Using the IQR to calc outliers
-        """
+    Notes: Using the IQR to calc outliers
+    """
     for index in data.index:
         plt.figure(figsize=(10, 10))
-        plt.hist(data.loc[f"{index}"], **(plot_args or {}))
+        plt.hist(data.loc[index], **(plot_args or {}))
         plt.title(f"{index} Frequency")
         plt.show()
 
 
 def unnest_dictionary(
-        data: dict, key: str, prefix: str = "", inplace: bool = False
+    data: dict, key: str, prefix: str = "", inplace: bool = False
 ) -> Optional[dict]:
     """Insert the keys of a sub-dictionary into data dictionary.
 
@@ -617,9 +662,9 @@ def convert_ani1_data_to_dataframe(data: List[Dict]) -> pd.DataFrame:
 
 
 def load_ani1_data(
-        config: Dict = ani1_config,
-        ani1_path: str = "./ANI-1ccx_clean_fullentry.h5",
-        as_dataframe=False,
+    config: Dict = ani1_config,
+    ani1_path: str = "./ANI-1ccx_clean_fullentry.h5",
+    as_dataframe=False,
 ) -> List[Dict]:
     molecules = get_ani1data(
         allowed_Z=config["allowed_Z"],
