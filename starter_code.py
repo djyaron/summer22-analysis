@@ -4,6 +4,7 @@ Created on Thu Jun  2 10:48:30 2022
 
 @author: fhu14
 """
+from functools import lru_cache
 from pandas import DataFrame, Series
 
 """
@@ -58,6 +59,16 @@ ani1_config = {
         "nt": "npno_ccsd(t)_tz.energy",
         "cc": "ccsd(t)_cbs.energy",
     },
+}
+
+
+ATOM_PAIR_TO_BOND_ANGSTROM = {
+    frozenset([1, 6]): (0.95, 1.70),
+    frozenset([1, 7]): (0.95, 1.50),
+    frozenset([1, 8]): (0.90, 1.50),
+    frozenset([6, 6]): (1.00, 1.90),
+    frozenset([6, 7]): (1.10, 1.80),
+    frozenset([6, 8]): (1.10, 1.75),
 }
 
 
@@ -424,31 +435,7 @@ def get_residuals_by_num_heavy_atoms(
     return molecules_by_heavy_atoms
 
 
-def rmse(y: Array, y_pred: Optional[Array] = None) -> float:
-    """Calculate the root mean squared error between y and y_pred.
-
-    If y_pred is not provided, y is treated as the residual vector.
-    """
-
-    if y_pred is None:
-        rmse = np.sqrt(np.mean(np.power(y, 2)))
-    else:
-        rmse = np.sqrt(np.mean(np.power((y - y_pred), 2)))
-
-    return rmse
-
-
-ATOM_PAIR_TO_BOND_ANGSTROM = {
-    frozenset([1, 6]): (0.95, 1.70),
-    frozenset([1, 7]): (0.95, 1.50),
-    frozenset([1, 8]): (0.90, 1.50),
-    frozenset([6, 6]): (1.00, 1.90),
-    frozenset([6, 7]): (1.10, 1.80),
-    frozenset([6, 8]): (1.10, 1.75),
-}
-
-
-def bonds_from_coordinates(coordinates, atomic_numbers):
+def bonds_from_coordinates(coordinates: Array, atomic_numbers: Array) -> List:
     pairwise_distance = cdist(coordinates, coordinates)
 
     bonds = []
@@ -465,12 +452,45 @@ def bonds_from_coordinates(coordinates, atomic_numbers):
         if bond_length_min_max is not None:
             bond_length_min, bond_length_max = bond_length_min_max
             if bond_length_min < atom_atom_distance < bond_length_max:
-                # print(
-                #     f"{atom_types[atomic_numbers[i]]}-{atom_types[atomic_numbers[j]]} bond"
-                # )
                 bonds.append((i, j))
 
     return bonds
+
+
+def get_residuals_by_num_bonds(molecules: List[Dict], residuals: Array) -> Dict:
+    molecules_by_num_bonds = {}
+
+    for i, molecule in enumerate(molecules):
+        if molecule.get("bonds") is None:
+            bonds = bonds_from_coordinates(
+                molecule["coordinates"], molecule["atomic_numbers"]
+            )
+            molecule["bonds"] = bonds
+
+        num_bonds = len(molecule["bonds"])
+
+        resid_for_molecule = residuals[i]
+
+        if molecules_by_num_bonds.get(num_bonds) is None:
+            molecules_by_num_bonds[num_bonds] = []
+
+        molecules_by_num_bonds[num_bonds].append(resid_for_molecule)
+
+    return molecules_by_num_bonds
+
+
+def rmse(y: Array, y_pred: Optional[Array] = None) -> float:
+    """Calculate the root mean squared error between y and y_pred.
+
+    If y_pred is not provided, y is treated as the residual vector.
+    """
+
+    if y_pred is None:
+        rmse = np.sqrt(np.mean(np.power(y, 2)))
+    else:
+        rmse = np.sqrt(np.mean(np.power((y - y_pred), 2)))
+
+    return rmse
 
 
 def compute_rmse_by_num_heavy_atoms(
@@ -561,15 +581,93 @@ def plot_rmse_by_num_heavy_atoms(
             method2_full_name = method2
 
         title = f"RMSE vs. # of Heavy Atoms ({method1_full_name} - {method2_full_name})"
-        # group.plot(x="Heavy Atoms", y="RMSE", title=title)
+
         group.set_index("Heavy Atoms")[["RMSE", "RMSE / sqrt(nh)"]].plot(title=title)
-        # plt.errorbar(
-        #     x=group["Heavy Atoms"],
-        #     y=group["RMSE"],
-        #     yerr=group["STD"] / (group["n"] ** 0.5),
-        # )
-        #
-        # plt.title(title)
+        plt.show()
+
+
+def compute_rmse_by_num_bonds(
+    molecules: List[Dict],
+    resid: Dict[Tuple[str, str], Array],
+    show_progress: bool = True,
+) -> pd.DataFrame:
+    """Calculates the bond-count conditional RMSE for each method-method combination.
+
+    Args:
+        molecules (List[Dict]): List of molecules dictionaries from ANI-1 data.
+        resid (Dict): Dictionary of residual vectors for each method-method combination.
+        show_progress (bool): Whether to display the TQDM progress bar.
+
+    Returns:
+        pd.DataFrame: Dataframe with the RMSE conditional on the number of bonds for
+        each method-method combination. Also includes STD, which is the standard
+        deviation of the residual vector, and n, which is the number of residuals
+        used in the calculation.
+    """
+
+    # TODO: This function can be simplified through vectorization, but is
+    # written this way because of how the method-method residuals are
+    # stored in the resid dictionary.
+    dataframes = []
+
+    method_pairs = list(resid.keys())
+    for method_pair in tqdm(
+        method_pairs, desc="Computing RMSE", disable=not show_progress
+    ):
+        resids_by_n_bonds = get_residuals_by_num_bonds(molecules, resid[method_pair])
+
+        rmse_vals = []
+        rmse_nbond_vals = []
+        sd_vals = []
+        num_molecules = []
+
+        for num_bonds, resid_by_num_bonds in resids_by_n_bonds.items():
+            rmse_val = rmse(resid_by_num_bonds)
+            rmse_vals.append(rmse_val)
+            rmse_nbond_vals.append(rmse_val / num_bonds**0.5)
+
+            sd_vals.append(np.std(resid_by_num_bonds))
+            num_molecules.append(len(resid_by_num_bonds))
+
+        method_pair_rmse_df = pd.DataFrame(
+            {
+                "RMSE": rmse_vals,
+                "RMSE / sqrt(nbonds)": rmse_nbond_vals,
+                "Bonds": list(resids_by_n_bonds.keys()),
+                "Method Pair": [method_pair] * len(resids_by_n_bonds),
+                "STD": sd_vals,
+                "n": num_molecules,
+            }
+        )
+
+        dataframes.append(method_pair_rmse_df)
+
+    rmse_df = pd.concat(dataframes)
+    return rmse_df
+
+
+def plot_rmse_by_num_bonds(
+    rmse_df: pd.DataFrame, method_id_to_name: Optional[Dict[str, str]] = None
+) -> None:
+    """Plots the RMSE conditional on bond count for each method-method combination.
+
+    Args:
+        rmse_df (pd.DataFrame): Dataframe with the RMSE conditional on bond c ount for
+        each method-method combination.
+    """
+
+    for (method1, method2), group in rmse_df.groupby("Method Pair"):
+        if method_id_to_name is not None:
+            method1_full_name = method_id_to_name[method1]
+            method2_full_name = method_id_to_name[method2]
+        else:
+            method1_full_name = method1
+            method2_full_name = method2
+
+        title = f"RMSE vs. # of Bonds ({method1_full_name} - {method2_full_name})"
+        group.set_index("Bonds").sort_index()[["RMSE", "RMSE / sqrt(nbonds)"]].plot(
+            title=title
+        )
         plt.show()
 
 
