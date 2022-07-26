@@ -479,6 +479,22 @@ def get_residuals_by_num_bonds(molecules: List[Dict], residuals: Array) -> Dict:
     return molecules_by_num_bonds
 
 
+def get_residuals_by_num_atoms(molecules: List[Dict], residuals: Array) -> Dict:
+    molecules_by_num_atoms = {}
+
+    for i, molecule in enumerate(molecules):
+        num_atoms = len(molecule["atomic_numbers"])
+
+        resid_for_molecule = residuals[i]
+
+        if molecules_by_num_atoms.get(num_atoms) is None:
+            molecules_by_num_atoms[num_atoms] = []
+
+        molecules_by_num_atoms[num_atoms].append(resid_for_molecule)
+
+    return molecules_by_num_atoms
+
+
 def rmse(y: Array, y_pred: Optional[Array] = None) -> float:
     """Calculate the root mean squared error between y and y_pred.
 
@@ -666,6 +682,88 @@ def plot_rmse_by_num_bonds(
 
         title = f"RMSE vs. # of Bonds ({method1_full_name} - {method2_full_name})"
         group.set_index("Bonds").sort_index()[["RMSE", "RMSE / sqrt(nbonds)"]].plot(
+            title=title
+        )
+        plt.show()
+
+
+def compute_rmse_by_num_atoms(
+    molecules: List[Dict],
+    resid: Dict[Tuple[str, str], Array],
+    show_progress: bool = True,
+) -> pd.DataFrame:
+    """Calculates the atom-count conditional RMSE for each method-method combination.
+
+    Args:
+        molecules (List[Dict]): List of molecules dictionaries from ANI-1 data.
+        resid (Dict): Dictionary of residual vectors for each method-method combination.
+        show_progress (bool): Whether to display the TQDM progress bar.
+
+    Returns:
+        pd.DataFrame: Dataframe with the RMSE conditional on the number of atoms for
+        each method-method combination. Also includes STD, which is the standard
+        deviation of the residual vector, and n, which is the number of residuals
+        used in the calculation.
+    """
+
+    dataframes = []
+
+    method_pairs = list(resid.keys())
+    for method_pair in tqdm(
+        method_pairs, desc="Computing RMSE", disable=not show_progress
+    ):
+        resids_by_n_atoms = get_residuals_by_num_atoms(molecules, resid[method_pair])
+
+        rmse_vals = []
+        rmse_n_atom_vals = []
+        sd_vals = []
+        num_molecules = []
+
+        for n_atoms, resid_by_n_atoms in resids_by_n_atoms.items():
+            rmse_val = rmse(resid_by_n_atoms)
+            rmse_vals.append(rmse_val)
+            rmse_n_atom_vals.append(rmse_val / n_atoms**0.5)
+
+            sd_vals.append(np.std(resid_by_n_atoms))
+            num_molecules.append(len(resid_by_n_atoms))
+
+        method_pair_rmse_df = pd.DataFrame(
+            {
+                "RMSE": rmse_vals,
+                "RMSE / sqrt(n_atoms)": rmse_n_atom_vals,
+                "Atoms": list(resids_by_n_atoms.keys()),
+                "Method Pair": [method_pair] * len(resids_by_n_atoms),
+                "STD": sd_vals,
+                "n": num_molecules,
+            }
+        )
+
+        dataframes.append(method_pair_rmse_df)
+
+    rmse_df = pd.concat(dataframes)
+    return rmse_df
+
+
+def plot_rmse_by_num_atoms(
+    rmse_df: pd.DataFrame, method_id_to_name: Optional[Dict[str, str]] = None
+) -> None:
+    """Plots the RMSE conditional on atom count for each method-method combination.
+
+    Args:
+        rmse_df (pd.DataFrame): Dataframe with the RMSE conditional on bond c ount for
+        each method-method combination.
+    """
+
+    for (method1, method2), group in rmse_df.groupby("Method Pair"):
+        if method_id_to_name is not None:
+            method1_full_name = method_id_to_name[method1]
+            method2_full_name = method_id_to_name[method2]
+        else:
+            method1_full_name = method1
+            method2_full_name = method2
+
+        title = f"RMSE vs. # of Atoms ({method1_full_name} - {method2_full_name})"
+        group.set_index("Bonds").sort_index()[["RMSE", "RMSE / sqrt(n_atoms)"]].plot(
             title=title
         )
         plt.show()
