@@ -493,6 +493,20 @@ def rmse(y: Array, y_pred: Optional[Array] = None) -> float:
     return rmse
 
 
+def mae(y: Array, y_pred: Optional[Array] = None) -> float:
+    """Calculate the mean absolute error between y and y_pred.
+
+    If y_pred is not provided, y is treated as the residual vector.
+    """
+
+    if y_pred is None:
+        mae = np.mean(np.abs(y))
+    else:
+        mae = np.mean(np.abs(y - y_pred))
+
+    return mae
+
+
 def compute_rmse_by_num_heavy_atoms(
     molecules: List[Dict],
     resid: Dict[Tuple[str, str], Array],
@@ -529,6 +543,7 @@ def compute_rmse_by_num_heavy_atoms(
 
         # We have about 389 molecules with 1 heavy atom
         rmse_vals = []
+        mae_vals = []
         rmse_nh_vals = []
         sd_vals = []
         num_molecules = []
@@ -542,6 +557,9 @@ def compute_rmse_by_num_heavy_atoms(
             rmse_vals.append(rmse_val)
             rmse_nh_vals.append(rmse_val / num_heavy_atoms**0.5)
 
+            mae_val = mae(resids_by_heaviness[num_heavy_atoms])
+            mae_vals.append(mae_val)
+
             sd_vals.append(np.std(resids_by_heaviness[num_heavy_atoms]))
             num_molecules.append(len(resids_by_heaviness[num_heavy_atoms]))
 
@@ -549,6 +567,7 @@ def compute_rmse_by_num_heavy_atoms(
             {
                 "RMSE": rmse_vals,
                 "RMSE / sqrt(nh)": rmse_nh_vals,
+                "MAE": mae_vals,
                 "Heavy Atoms": heavy_atoms,
                 "Method Pair": [method_pair] * len(heavy_atoms),
                 "STD": sd_vals,
@@ -617,6 +636,7 @@ def compute_rmse_by_num_bonds(
         resids_by_n_bonds = get_residuals_by_num_bonds(molecules, resid[method_pair])
 
         rmse_vals = []
+        mae_vals = []
         rmse_nbond_vals = []
         sd_vals = []
         num_molecules = []
@@ -626,12 +646,16 @@ def compute_rmse_by_num_bonds(
             rmse_vals.append(rmse_val)
             rmse_nbond_vals.append(rmse_val / num_bonds**0.5)
 
+            mae_val = mae(resid_by_num_bonds)
+            mae_vals.append(mae_val)
+
             sd_vals.append(np.std(resid_by_num_bonds))
             num_molecules.append(len(resid_by_num_bonds))
 
         method_pair_rmse_df = pd.DataFrame(
             {
                 "RMSE": rmse_vals,
+                "MAE": mae_vals,
                 "RMSE / sqrt(nbonds)": rmse_nbond_vals,
                 "Bonds": list(resids_by_n_bonds.keys()),
                 "Method Pair": [method_pair] * len(resids_by_n_bonds),
