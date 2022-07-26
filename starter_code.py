@@ -560,7 +560,10 @@ def compute_rmse_by_num_heavy_atoms(
         # We have about 389 molecules with 1 heavy atom
         rmse_vals = []
         mae_vals = []
-        rmse_nh_vals = []
+        mae_nh_vals = []
+        mae_nh_vals_2 = []
+        rmse_nh_vals = []  # RMSE(e) / nh
+        rmse_nh_vals_2 = []  # RMSE(e/nh)
         sd_vals = []
         num_molecules = []
 
@@ -573,8 +576,18 @@ def compute_rmse_by_num_heavy_atoms(
             rmse_vals.append(rmse_val)
             rmse_nh_vals.append(rmse_val / num_heavy_atoms**0.5)
 
+            rmse_val_2 = rmse(
+                np.array(resids_by_heaviness[num_heavy_atoms]) / num_heavy_atoms
+            )
+            rmse_nh_vals_2.append(rmse_val_2)
+
             mae_val = mae(resids_by_heaviness[num_heavy_atoms])
             mae_vals.append(mae_val)
+
+            mae_nh_vals.append(mae_val / num_heavy_atoms**0.5)
+            mae_nh_vals_2.append(
+                mae(np.array(resids_by_heaviness[num_heavy_atoms]) / num_heavy_atoms)
+            )
 
             sd_vals.append(np.std(resids_by_heaviness[num_heavy_atoms]))
             num_molecules.append(len(resids_by_heaviness[num_heavy_atoms]))
@@ -583,7 +596,10 @@ def compute_rmse_by_num_heavy_atoms(
             {
                 "RMSE": rmse_vals,
                 "RMSE / sqrt(nh)": rmse_nh_vals,
+                "RMSE(E/nh)": rmse_nh_vals_2,
                 "MAE": mae_vals,
+                "MAE / sqrt(nh)": mae_nh_vals,
+                "MAE(E/nh)": mae_nh_vals_2,
                 "Heavy Atoms": heavy_atoms,
                 "Method Pair": [method_pair] * len(heavy_atoms),
                 "STD": sd_vals,
@@ -739,15 +755,28 @@ def compute_rmse_by_num_atoms(
         resids_by_n_atoms = get_residuals_by_num_atoms(molecules, resid[method_pair])
 
         rmse_vals = []
+        mae_vals = []
+        mae_n_atom_vals = []
+        mae_vals_2 = []  # MAE(E/n)
         rmse_n_atom_vals = []
+        rmse_n_atom_vals_2 = []  # RMSE(E/n)
         sd_vals = []
         num_molecules = []
 
         for n_atoms, resid_by_n_atoms in resids_by_n_atoms.items():
+            resid_by_n_atoms = np.array(resid_by_n_atoms)
             rmse_val = rmse(resid_by_n_atoms)
             rmse_vals.append(rmse_val)
             rmse_n_atom_vals.append(rmse_val / n_atoms**0.5)
 
+            rmse_n_atom_val_2 = rmse(resid_by_n_atoms / n_atoms)
+            rmse_n_atom_vals_2.append(rmse_n_atom_val_2)
+
+            mae_val = mae(resid_by_n_atoms)
+            mae_vals.append(mae_val)
+            mae_n_atom_vals.append(mae(resid_by_n_atoms) / n_atoms**0.5)
+            mae_val_2 = mae(resid_by_n_atoms / n_atoms)  # MAE(E/n)
+            mae_vals_2.append(mae_val_2)
             sd_vals.append(np.std(resid_by_n_atoms))
             num_molecules.append(len(resid_by_n_atoms))
 
@@ -755,6 +784,10 @@ def compute_rmse_by_num_atoms(
             {
                 "RMSE": rmse_vals,
                 "RMSE / sqrt(n_atoms)": rmse_n_atom_vals,
+                "RMSE(E/n)": rmse_n_atom_vals_2,
+                "MAE": mae_vals,
+                "MAE / sqrt(n_atoms)": mae_n_atom_vals,
+                "MAE(E/n)": mae_vals_2,
                 "Atoms": list(resids_by_n_atoms.keys()),
                 "Method Pair": [method_pair] * len(resids_by_n_atoms),
                 "STD": sd_vals,
