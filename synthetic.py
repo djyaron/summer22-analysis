@@ -35,8 +35,8 @@ def mae(y: Array, y_pred: Optional[Array] = None) -> float:
     return mae
 
 
-def get_energy(nheavy: int, nsamples: int) -> Array:
-    raw = np.random.normal(size=(nheavy, nsamples))
+def get_energy(nheavy: int, nsamples: int, loc=0, scale=1) -> Array:
+    raw = np.random.normal(loc=loc, scale=scale, size=(nheavy, nsamples))
     return np.sum(raw, 0)
 
 
@@ -60,12 +60,13 @@ plt.show()
 
 # %%
 
+N = 1_000_000
 # Generate a synthetic dataset
 xplot = []
 yplot = []
 for nh in range(1, 9):
-    method1 = get_energy(nh, 1_000_000)
-    method2 = get_energy(nh, 1_000_000)
+    method1 = get_energy(nh, N, loc=0, scale=1)
+    method2 = get_energy(nh, N, loc=0, scale=1)
 
     residual = method1 - method2
 
@@ -83,8 +84,6 @@ for nh in range(1, 9):
 
 df = pd.DataFrame(yplot, index=xplot)
 
-# %%
-
 # Plotting
 cols = [
     "RMSE(E)",
@@ -98,12 +97,15 @@ cols = [
 fig, ax = plt.subplots(figsize=(11, 8.5))
 
 ax.set_prop_cycle(
-    color=["b", "r", "g", "b", "r", "g"],
+    color=2 * ["b", "r", "g"],
     linestyle=["-", "-", "-", "-.", "-.", "-."],
-    marker=["o", "o", "o", "o", "o", "o"],
+    marker=2 * ["o", "o", "o"],
 )
 
 plt.plot(xplot, df[cols].to_numpy())
-plt.legend(cols, loc="upper left", fancybox=True)
-
+plt.legend(cols, loc="upper left", fancybox=True, shadow=True)
+plt.xlabel("Number of heavy atoms")
+plt.ylabel("Error")
+plt.title("Error vs. Number of Heavy Atoms (synthetic dataset)")
+plt.show()
 # %%
