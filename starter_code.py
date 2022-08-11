@@ -76,6 +76,16 @@ ATOM_PAIR_TO_BOND_ANGSTROM = {
 
 
 def build_XX_matrix(dataset: List[Dict], allowed_Zs: List[int]) -> Array:
+    r"""Builds a holder matrix for the residuals between energy targets
+
+        Arguments:
+            dataset (List[Dict]): The list of molecule dictionaries that have had the
+                DFTB+ results added to them.
+            allowed_Zs (List[int]): The allowed atoms in the molecules
+
+        Returns:
+            XX (Array): Per-molecule atomic frequency matrix
+        """
     nmol = len(dataset)
     XX = np.zeros([nmol, len(allowed_Zs) + 1])
     iZ = {x: i for i, x in enumerate(allowed_Zs)}
@@ -276,6 +286,7 @@ def create_heatmap(
     target: str,
     title: str,
     data_matrix: Optional[List[Dict]] = None,
+    dataframe: Optional[Union[DataFrame, Series]] = None,
     molecules: Optional[List[Dict]] = None,
     allowed_Z: Optional[List[int]] = None,
     plot_args: Optional[Dict] = None,
@@ -288,6 +299,7 @@ def create_heatmap(
         target (str): List of method IDs to compare
         title (str): Title of heatmap
         data_matrix (Optional[List[Dict]]): residual matrix
+        dataframe Optional[Union[DataFrame, Series]]: residual dataframe
         molecules (Optional(List[Dict])): From ANI-1 dataset
         allowed_Z (Optional(List[int])): The allowed atoms in the molecules
         plot_args (Optional[Dict]): Arguments to pass to seaborn heatmap
@@ -301,7 +313,7 @@ def create_heatmap(
         Refactored to take in the residual matrix by default
     """
 
-    if data_matrix is None and molecules is None:
+    if data_matrix is None and dataframe is None and molecules is None:
         raise ValueError("One of data_matrix or molecules must be provided")
 
     target_values = list(target.values())
@@ -311,20 +323,25 @@ def create_heatmap(
 
     # List indices
     target_idx_pairs = list(itertools.combinations(range(n_targets), 2))
-
     if show_progress:
         target_idx_pairs = tqdm(target_idx_pairs)
 
-    if data_matrix is None:
+    if data_matrix is None and dataframe is None:
         data_matrix = calc_resid(
             molecules, target, allowed_Z, show_progress=show_progress, XX=XX
         )
 
-    for (idx_1, idx_2), (ind_1, ind_2) in itertools.zip_longest(
-        data_matrix, target_idx_pairs
-    ):
-        resid = data_matrix[idx_1, idx_2]
-        mae_matrix[ind_2, ind_1] = np.mean(np.abs(resid))
+    if data_matrix is not None:
+        for (idx_1, idx_2), (ind_1, ind_2) in itertools.zip_longest(
+            data_matrix, target_idx_pairs
+        ):
+            resid = data_matrix[idx_1, idx_2]
+            mae_matrix[ind_2, ind_1] = np.mean(np.abs(resid))
+    elif dataframe is not None:
+        summed = dataframe.groupby(level=[0]).sum()
+        for (ind_1, ind_2) in target_idx_pairs:
+            resid = summed[f"({ind_1}, {ind_2})"]
+            mae_matrix[ind_2, ind_1] = np.mean(np.abs(resid))
 
     # Mask for seaborn heatmap, to remove the upper triangular portion,
     # but including the main diagonal
@@ -366,7 +383,7 @@ def filter_outliers(
         dataframe (Union[DataFrame, Series]): dataframe with ref
         energies replaced with bool of whether it was an outlier or not
 
-    Notes: Using the IQR to calc outliers
+    Notes: Using the SD method to calc outliers
     """
 
     if data_matrix is not None:
@@ -395,8 +412,8 @@ def filter_outliers(
 
     elif dataframe is not None:
         if filter_type == "SD":
-            return (dataframe < n_sd * dataframe.std()) | (
-                dataframe > n_sd * dataframe.std()
+            return (dataframe < dataframe.mean() - n_sd * dataframe.std()) | (
+                dataframe > dataframe.mean() + n_sd * dataframe.std()
             )
         if filter_type == "IQR":
             return (dataframe < dataframe.quantile(q_lower)) | (
@@ -416,6 +433,14 @@ def is_outlier(
 
 
 def num_heavy_atoms(name: str) -> int:
+    r"""Determines the number of heavy atoms in a molecule based on its empirical formula
+
+        Arguments:
+            name (str): molecule name
+
+        Returns:
+            num_heavy (int): number of heavy atoms
+        """
     matches = re.findall(r"[A-Z]\d+", name)
     num_heavy = sum(int(m[1:]) for m in matches if not m.startswith("H"))
     return num_heavy
@@ -839,7 +864,7 @@ def create_boxplot(
     method: Optional[str] = None,
     plot_args: Optional[Dict] = None,
 ):
-    oriboxfig = plt.figure(figsize=(10, 10))
+    plt.figure(figsize=(10, 10))
     if method is not None:
         boxplot_data = {
             key: value for key, value in boxplot_data.items() if method in key
@@ -865,8 +890,6 @@ def create_histogram(data: DataFrame, plot_args: Optional[Dict] = None):
 
     Returns:
         Nothing
-
-    Notes: Using the IQR to calc outliers
     """
     for index in data.index:
         plt.figure(figsize=(10, 10))
@@ -939,6 +962,16 @@ def load_ani1_data(
     ani1_path: str = "./ANI-1ccx_clean_fullentry.h5",
     as_dataframe=False,
 ) -> List[Dict]:
+    r"""Loads molecules from the ANI-1 Dataset
+
+        Arguments:
+            config (Dict): data to grab from ANI-1
+            ani1_path (str): ANI-1 dataset
+            as_dataframe (bool): return as dataframe or not
+
+        Returns:
+            molecules (List[Dict]): molecules from ANI-1 dataset
+        """
     molecules = get_ani1data(
         allowed_Z=config["allowed_Z"],
         heavy_atoms=config["heavy_atoms"],
