@@ -338,10 +338,11 @@ def create_heatmap(
             resid = data_matrix[idx_1, idx_2]
             mae_matrix[ind_2, ind_1] = np.mean(np.abs(resid))
     elif dataframe is not None:
-        summed = dataframe.groupby(level=[0]).sum()
-        for (ind_1, ind_2) in target_idx_pairs:
-            resid = summed[f"({ind_1}, {ind_2})"]
-            mae_matrix[ind_2, ind_1] = np.mean(np.abs(resid))
+        # summed = dataframe.groupby(level=[0]).sum()
+        for i, (target_1, target_2) in enumerate(dataframe.columns):
+            target_1_idx, target_2_idx = target_idx_pairs[i]
+            resid = dataframe[(target_1, target_2)]
+            mae_matrix[target_2_idx, target_1_idx] = np.mean(np.abs(resid))
 
     # Mask for seaborn heatmap, to remove the upper triangular portion,
     # but including the main diagonal
@@ -357,6 +358,7 @@ def create_heatmap(
         **(plot_args or {}),
     )
     plt.title(title)
+    plt.savefig(dpi=300)
     plt.show()
 
 
@@ -382,10 +384,7 @@ def filter_outliers(
         filtered_dict (Dict): matrix with no outliers
         dataframe (Union[DataFrame, Series]): dataframe with ref
         energies replaced with bool of whether it was an outlier or not
-
-    Notes: Using the SD method to calc outliers
     """
-
     if data_matrix is not None:
         filtered_dict = {}
         upper_bound = 0
@@ -449,6 +448,16 @@ def num_heavy_atoms(name: str) -> int:
 def get_residuals_by_num_heavy_atoms(
     molecules: List[Dict], residuals: Array, heavy_atoms: list[int]
 ) -> Dict:
+    r"""Calculates residuals by the number of heavy atoms
+
+        Arguments:
+            heavy_atoms (List[int]): list of heavy atoms to include in molecules
+            residuals (Array): honestly idk
+            molecules (List[Dict]): from ANI-1 Dataset
+
+        Returns:
+            molecules_by_heavy_atoms (Dict): Dictionary of the residuals keyed by num heavy atoms
+            """
     molecules_by_heavy_atoms = {x: [] for x in heavy_atoms}
 
     for i, molecule in enumerate(molecules):
@@ -461,6 +470,15 @@ def get_residuals_by_num_heavy_atoms(
 
 
 def bonds_from_coordinates(coordinates: Array, atomic_numbers: Array) -> List:
+    r"""Calculate min and max bond lengths from a set of coordinates
+
+    Args:
+        coordinates (Array): Expected distance to differentiate bonds
+        atomic_numbers (Array): atoms to analyze
+
+    Returns:
+        bonds (List): whether a distance is a bond or not
+    """
     pairwise_distance = cdist(coordinates, coordinates)
 
     bonds = []
@@ -483,6 +501,15 @@ def bonds_from_coordinates(coordinates: Array, atomic_numbers: Array) -> List:
 
 
 def get_residuals_by_num_bonds(molecules: List[Dict], residuals: Array) -> Dict:
+    r"""Calculate residuals by the number of bonds
+
+    Args:
+        molecules (List[Dict]): from ANI-1 Dataset
+        residuals (Array): calculated residuals from calc_resid
+
+    Returns:
+        molecules_by_num_bonds (Dict): residuals by the number of bonds
+    """
     molecules_by_num_bonds = {}
 
     for i, molecule in enumerate(molecules):
@@ -505,6 +532,15 @@ def get_residuals_by_num_bonds(molecules: List[Dict], residuals: Array) -> Dict:
 
 
 def get_residuals_by_num_atoms(molecules: List[Dict], residuals: Array) -> Dict:
+    r"""Determine residual by the number of atoms
+
+    Args:
+        molecules (List[Dict]): from ANI-1 Dataset
+        residuals (Array): Calculated residuals from calc resid
+
+    Returns:
+        molecules_by_num_atoms (Dict): resids by molecules by number atoms
+    """
     molecules_by_num_atoms = {}
 
     for i, molecule in enumerate(molecules):
@@ -521,7 +557,10 @@ def get_residuals_by_num_atoms(molecules: List[Dict], residuals: Array) -> Dict:
 
 
 def rmse(y: Array, y_pred: Optional[Array] = None) -> float:
-    """Calculate the root mean squared error between y and y_pred.
+    r"""Calculate the root mean squared error between y and y_pred.
+
+    Arguments:
+
 
     If y_pred is not provided, y is treated as the residual vector.
     """
@@ -864,6 +903,17 @@ def create_boxplot(
     method: Optional[str] = None,
     plot_args: Optional[Dict] = None,
 ):
+    r"""Create a boxplot
+
+    Args:
+        boxplot_data (Dict): input from calc resid
+        title (str): boxplot title
+        method (Optional(str)): specify which target energy to plot
+        plot_args (Optional(Dict): other plot args
+
+    Returns:
+        Nothing
+    """
     plt.figure(figsize=(10, 10))
     if method is not None:
         boxplot_data = {
@@ -880,13 +930,12 @@ def create_boxplot(
     plt.show()
 
 
-def create_histogram(data: DataFrame, plot_args: Optional[Dict] = None):
+def create_histogram(data: DataFrame, xlabel: str, plot_args: Optional[Dict] = None):
     """Filters outliers from each element in the dataset
 
     Arguments:
         data (DataFrame): FILTERED data dataframe--must already count the number of outliers
         plot_args (Optional[Dict]): additional args for the histogram
-
 
     Returns:
         Nothing
@@ -894,7 +943,9 @@ def create_histogram(data: DataFrame, plot_args: Optional[Dict] = None):
     for index in data.index:
         plt.figure(figsize=(10, 10))
         plt.hist(data.loc[index], **(plot_args or {}))
+        plt.xlabel(f"{xlabel}")
         plt.title(f"{index} Frequency")
+        plt.savefig(dpi=300)
         plt.show()
 
 
