@@ -4,7 +4,6 @@ Created on Thu Jun  2 10:48:30 2022
 
 @author: fhu14
 """
-from functools import lru_cache
 from pandas import DataFrame, Series
 
 """
@@ -18,9 +17,8 @@ import itertools
 import os
 import pickle
 from collections import Counter
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union
 
-import numpy as np
 import pandas as pd
 import statistics as stats
 
@@ -60,7 +58,6 @@ ani1_config = {
         "cc": "ccsd(t)_cbs.energy",
     },
 }
-
 
 ATOM_PAIR_TO_BOND_ANGSTROM = {
     frozenset([1, 6]): (0.95, 1.70),
@@ -293,7 +290,7 @@ def create_heatmap(
     show_progress: bool = False,
     XX: Optional[Array] = None,
 ):
-    """Creates a heatmap of the MAE between methods.
+    r"""Creates a heatmap of the MAE between methods.
 
     Args:
         target (str): List of method IDs to compare
@@ -370,7 +367,7 @@ def filter_outliers(
     q_upper: float = 0.75,
     n_sd: int = 20,
 ) -> Any:
-    """Filters outliers from each element in the dataset
+    r"""Filters outliers from each element in the dataset
 
     Arguments:
         n_sd (int): the number of standard deviations
@@ -560,9 +557,13 @@ def rmse(y: Array, y_pred: Optional[Array] = None) -> float:
     r"""Calculate the root mean squared error between y and y_pred.
 
     Arguments:
+        y (Array): exp values
+        y_pred (Optional(Array)): target values
 
+    Returns:
+        rmse (float): root mean square error
 
-    If y_pred is not provided, y is treated as the residual vector.
+    Notes: If y_pred is not provided, y is treated as the residual vector.
     """
 
     if y_pred is None:
@@ -574,9 +575,9 @@ def rmse(y: Array, y_pred: Optional[Array] = None) -> float:
 
 
 def mae(y: Array, y_pred: Optional[Array] = None) -> float:
-    """Calculate the mean absolute error between y and y_pred.
+    r"""Calculate the mean absolute error between y and y_pred.
 
-    If y_pred is not provided, y is treated as the residual vector.
+    Notes: If y_pred is not provided, y is treated as the residual vector.
     """
 
     if y_pred is None:
@@ -638,7 +639,7 @@ def compute_rmse_by_num_heavy_atoms(
             # (for a given method-method pair)
             rmse_val = rmse(resids_by_heaviness[num_heavy_atoms])
             rmse_vals.append(rmse_val)
-            rmse_nh_vals.append(rmse_val / num_heavy_atoms**0.5)
+            rmse_nh_vals.append(rmse_val / num_heavy_atoms ** 0.5)
 
             rmse_val_2 = rmse(
                 np.array(resids_by_heaviness[num_heavy_atoms]) / num_heavy_atoms
@@ -648,7 +649,7 @@ def compute_rmse_by_num_heavy_atoms(
             mae_val = mae(resids_by_heaviness[num_heavy_atoms])
             mae_vals.append(mae_val)
 
-            mae_nh_vals.append(mae_val / num_heavy_atoms**0.5)
+            mae_nh_vals.append(mae_val / num_heavy_atoms ** 0.5)
             mae_nh_vals_2.append(
                 mae(np.array(resids_by_heaviness[num_heavy_atoms]) / num_heavy_atoms)
             )
@@ -740,7 +741,7 @@ def compute_rmse_by_num_bonds(
         for num_bonds, resid_by_num_bonds in resids_by_n_bonds.items():
             rmse_val = rmse(resid_by_num_bonds)
             rmse_vals.append(rmse_val)
-            rmse_nbond_vals.append(rmse_val / num_bonds**0.5)
+            rmse_nbond_vals.append(rmse_val / num_bonds ** 0.5)
 
             mae_val = mae(resid_by_num_bonds)
             mae_vals.append(mae_val)
@@ -831,14 +832,14 @@ def compute_rmse_by_num_atoms(
             resid_by_n_atoms = np.array(resid_by_n_atoms)
             rmse_val = rmse(resid_by_n_atoms)
             rmse_vals.append(rmse_val)
-            rmse_n_atom_vals.append(rmse_val / n_atoms**0.5)
+            rmse_n_atom_vals.append(rmse_val / n_atoms ** 0.5)
 
             rmse_n_atom_val_2 = rmse(resid_by_n_atoms / n_atoms)
             rmse_n_atom_vals_2.append(rmse_n_atom_val_2)
 
             mae_val = mae(resid_by_n_atoms)
             mae_vals.append(mae_val)
-            mae_n_atom_vals.append(mae(resid_by_n_atoms) / n_atoms**0.5)
+            mae_n_atom_vals.append(mae(resid_by_n_atoms) / n_atoms ** 0.5)
             mae_val_2 = mae(resid_by_n_atoms / n_atoms)  # MAE(E/n)
             mae_vals_2.append(mae_val_2)
             sd_vals.append(np.std(resid_by_n_atoms))

@@ -4,14 +4,16 @@ Created on Tue Jun  8 17:21:16 2021
 
 @author: fhu14
 """
-#%% Imports, definitions
-from typing import Union, List, Dict
-from h5py import File
-import numpy as np
 import collections
 from copy import deepcopy
+# %% Imports, definitions
+from typing import Union, List, Dict
 
-#%% Code behind
+import numpy as np
+from h5py import File
+
+
+# %% Code behind
 
 def get_data_type(specs: Union[List[str], str]) -> List[str]:
     r"""Obtains the corresponding ANI dataset keys from the keys specified
@@ -25,37 +27,38 @@ def get_data_type(specs: Union[List[str], str]) -> List[str]:
         res (list[str]): The list of ANI keys corresponding to the 
             given keys in specs.
     """
-    if not isinstance(specs,list):
+    if not isinstance(specs, list):
         specs = [specs]
     ANI1TYPES = {'dt': 'dftb.energy',  # Dftb Total
-                'de': 'dftb.elec_energy',  # Dftb Electronic
-                'dr': 'dftb.rep_energy',  # Dftb Repulsive
-                'pt': 'dftb_plus.energy',  # dftb Plus Total
-                'pe': 'dftb_plus.elec_energy',  # dftb Plus Electronic
-                'pr': 'dftb_plus.rep_energy',  # dftb Plus Repulsive
-                'hd': 'hf_dz.energy',  # Hf Dz
-                'ht': 'hf_tz.energy',
-                'hq': 'hf_qz.energy',
-                'wd': 'wb97x_dz.energy',  # Wb97x Dz
-                'wt': 'wb97x_tz.energy',
-                'md': 'mp2_dz.energy',  # Mp2 Dz
-                'mt': 'mp2_tz.energy',
-                'mq': 'mp2_qz.energy',
-                'td': 'tpno_ccsd(t)_dz.energy',  # Tpno Dz
-                'nd': 'npno_ccsd(t)_dz.energy',  # Npno Dz
-                'nt': 'npno_ccsd(t)_tz.energy',
-                'cc': 'ccsd(t)_cbs.energy'}
+                 'de': 'dftb.elec_energy',  # Dftb Electronic
+                 'dr': 'dftb.rep_energy',  # Dftb Repulsive
+                 'pt': 'dftb_plus.energy',  # dftb Plus Total
+                 'pe': 'dftb_plus.elec_energy',  # dftb Plus Electronic
+                 'pr': 'dftb_plus.rep_energy',  # dftb Plus Repulsive
+                 'hd': 'hf_dz.energy',  # Hf Dz
+                 'ht': 'hf_tz.energy',
+                 'hq': 'hf_qz.energy',
+                 'wd': 'wb97x_dz.energy',  # Wb97x Dz
+                 'wt': 'wb97x_tz.energy',
+                 'md': 'mp2_dz.energy',  # Mp2 Dz
+                 'mt': 'mp2_tz.energy',
+                 'mq': 'mp2_qz.energy',
+                 'td': 'tpno_ccsd(t)_dz.energy',  # Tpno Dz
+                 'nd': 'npno_ccsd(t)_dz.energy',  # Npno Dz
+                 'nt': 'npno_ccsd(t)_tz.energy',
+                 'cc': 'ccsd(t)_cbs.energy'}
     res = []
     for spec in specs:
         if spec in ANI1TYPES.keys():
-            res.append( ANI1TYPES[spec] )
+            res.append(ANI1TYPES[spec])
         elif spec in ANI1TYPES.values():
-            res.append( spec )
+            res.append(spec)
         else:
-            res.append(spec) #To handle additional things
+            res.append(spec)  # To handle additional things
     return res
 
-def get_targets_from_h5file(data_specs: Union[List[str], str], ani1_path: str, 
+
+def get_targets_from_h5file(data_specs: Union[List[str], str], ani1_path: str,
                             exclude: dict = None) -> dict:
     r"""Obtains the necessary target information from the dataset stored at ani1_path
     
@@ -80,8 +83,8 @@ def get_targets_from_h5file(data_specs: Union[List[str], str], ani1_path: str,
             if mol in exclude.keys():
                 if exclude[mol] == 'all':
                     continue
-                moldata = [np.delete(x, exclude[mol],0) for x in moldata]     
-            # if len(moldata) == 1:
+                moldata = [np.delete(x, exclude[mol], 0) for x in moldata]
+                # if len(moldata) == 1:
             target_molecs[mol] = moldata
             # Not sure why this subtraction exists, ignore for now...
             # else:
@@ -89,10 +92,12 @@ def get_targets_from_h5file(data_specs: Union[List[str], str], ani1_path: str,
             #     target_molecs[mol] += moldata[2:]
     return target_molecs
 
-#Fix the ani1_path for now
+
+# Fix the ani1_path for now
 ani1_path = 'data/ANI-1ccx_clean_fullentry.h5'
 
-def get_ani1data(allowed_Z: List[int], heavy_atoms: List[int], max_config: int, 
+
+def get_ani1data(allowed_Z: List[int], heavy_atoms: List[int], max_config: int,
                  target: Dict[str, str], ani1_path: str = ani1_path, exclude: List[str] = []) -> List[Dict]:
     r"""Extracts data from the ANI-1 data files
     
@@ -136,7 +141,7 @@ def get_ani1data(allowed_Z: List[int], heavy_atoms: List[int], max_config: int,
     target_alias, h5keys = zip(*target.items())
     target_alias, h5keys = list(target_alias), list(h5keys)
     all_zs = get_targets_from_h5file('atomic_numbers', ani1_path)
-    all_coords =  get_targets_from_h5file('coordinates', ani1_path)
+    all_coords = get_targets_from_h5file('coordinates', ani1_path)
     all_targets = get_targets_from_h5file(h5keys, ani1_path)
     if exclude is None:
         exclude = []
@@ -144,7 +149,7 @@ def get_ani1data(allowed_Z: List[int], heavy_atoms: List[int], max_config: int,
     for name in all_zs.keys():
         if name in exclude:
             continue
-        zs = all_zs[name][0] #Extract np array of the atomic numbers
+        zs = all_zs[name][0]  # Extract np array of the atomic numbers
         zcount = collections.Counter(zs)
         ztypes = list(zcount.keys())
         zheavy = [x for x in ztypes if x > 1]
@@ -156,13 +161,13 @@ def get_ani1data(allowed_Z: List[int], heavy_atoms: List[int], max_config: int,
             continue
         if nheavy not in heavy_atoms:
             continue
-        nconfig = all_coords[name][0].shape[0] #Extract the np array of the atomic coordinates
+        nconfig = all_coords[name][0].shape[0]  # Extract the np array of the atomic coordinates
         for iconfig in range(min(nconfig, max_config)):
             batch = dict()
             batch['name'] = name
             batch['iconfig'] = iconfig
             batch['atomic_numbers'] = zs
-            batch['coordinates'] = all_coords[name][0][iconfig,:,:]
+            batch['coordinates'] = all_coords[name][0][iconfig, :, :]
             batch['targets'] = dict()
             for i in range(len(target_alias)):
                 targ_key = target_alias[i]
@@ -170,9 +175,10 @@ def get_ani1data(allowed_Z: List[int], heavy_atoms: List[int], max_config: int,
             batches.append(batch)
     return batches
 
+
 def get_ani1data_boosted(allowed_Z: List[int], heavy_atoms: List[int], target_atoms: List[int],
                          criterion: str, max_config: int,
-                         boosted_config: int, target: Dict[str, str], 
+                         boosted_config: int, target: Dict[str, str],
                          ani1_path: str = ani1_path, exclude: List[str] = []) -> List[Dict]:
     r"""Extracts data from the ANI-1 data files
     
@@ -225,7 +231,7 @@ def get_ani1data_boosted(allowed_Z: List[int], heavy_atoms: List[int], target_at
     target_alias, h5keys = zip(*target.items())
     target_alias, h5keys = list(target_alias), list(h5keys)
     all_zs = get_targets_from_h5file('atomic_numbers', ani1_path)
-    all_coords =  get_targets_from_h5file('coordinates', ani1_path)
+    all_coords = get_targets_from_h5file('coordinates', ani1_path)
     all_targets = get_targets_from_h5file(h5keys, ani1_path)
     if exclude is None:
         exclude = []
@@ -233,7 +239,7 @@ def get_ani1data_boosted(allowed_Z: List[int], heavy_atoms: List[int], target_at
     for name in all_zs.keys():
         if name in exclude:
             continue
-        zs = all_zs[name][0] #Extract np array of the atomic numbers
+        zs = all_zs[name][0]  # Extract np array of the atomic numbers
         zcount = collections.Counter(zs)
         ztypes = list(zcount.keys())
         zheavy = [x for x in ztypes if x > 1]
@@ -245,19 +251,19 @@ def get_ani1data_boosted(allowed_Z: List[int], heavy_atoms: List[int], target_at
             continue
         if nheavy not in heavy_atoms:
             continue
-        #Check if any/all of the target elements are contained in the current molecule
+        # Check if any/all of the target elements are contained in the current molecule
         if criterion == 'any':
             target_present = any([z in ztypes for z in target_atoms])
         elif criterion == 'all':
             target_present = all([z in ztypes for z in target_atoms])
         target_config = boosted_config if target_present else max_config
-        nconfig = all_coords[name][0].shape[0] #Extract the np array of the atomic coordinates
+        nconfig = all_coords[name][0].shape[0]  # Extract the np array of the atomic coordinates
         for iconfig in range(min(nconfig, target_config)):
             batch = dict()
             batch['name'] = name
             batch['iconfig'] = iconfig
             batch['atomic_numbers'] = zs
-            batch['coordinates'] = all_coords[name][0][iconfig,:,:]
+            batch['coordinates'] = all_coords[name][0][iconfig, :, :]
             batch['targets'] = dict()
             for i in range(len(target_alias)):
                 targ_key = target_alias[i]
