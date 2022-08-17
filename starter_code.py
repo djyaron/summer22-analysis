@@ -348,14 +348,13 @@ def create_heatmap(
     ax = sns.heatmap(
         mae_matrix,
         annot=True,
-        fmt=".1f",
         xticklabels=target_values,
         yticklabels=target_values,
         mask=mask,
         **(plot_args or {}),
     )
     plt.title(title)
-    plt.savefig(dpi=300)
+    plt.savefig(dpi=300, fname=title)
     plt.show()
 
 
@@ -928,6 +927,7 @@ def create_boxplot(
     plt.boxplot(data, labels=labels, **(plot_args or {}))
     plt.title(f"{title} for {method}")
     plt.xticks(rotation=90)
+    plt.savefig(dpi=300, fname=title)
     plt.show()
 
 
@@ -946,7 +946,7 @@ def create_histogram(data: DataFrame, xlabel: str, plot_args: Optional[Dict] = N
         plt.hist(data.loc[index], **(plot_args or {}))
         plt.xlabel(f"{xlabel}")
         plt.title(f"{index} Frequency")
-        plt.savefig(dpi=300)
+        plt.savefig(dpi=300, fname=index)
         plt.show()
 
 
